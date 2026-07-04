@@ -1,4 +1,4 @@
-# cloud-itonami-6499
+# cloud-itonami-isic-6499
 
 Open Business Blueprint for **ISIC Rev.5 6499**: Other financial service activities, except insurance and pension funding, n.e.c..
 

@@ -1,4 +1,4 @@
-{:itonami.blueprint/id "cloud-itonami-6499"
+{:itonami.blueprint/id "cloud-itonami-isic-6499"
  :itonami.blueprint/name "Other financial service activities, except insurance and pension funding, n.e.c."
  :itonami.blueprint/isic-rev5 "6499"
  :itonami.blueprint/domain :finance/other-financial-services

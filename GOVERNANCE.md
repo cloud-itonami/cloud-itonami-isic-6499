@@ -1,6 +1,6 @@
 # Governance
 
-`cloud-itonami-6499` is an OSS open-business blueprint for other financial service activities not elsewhere classified, except insurance and pension funding (e.g. factoring, check-cashing, money-order issuance).
+`cloud-itonami-isic-6499` is an OSS open-business blueprint for other financial service activities not elsewhere classified, except insurance and pension funding (e.g. factoring, check-cashing, money-order issuance).
 Governance covers both the capability layer and the operator model.
 
 ## Maintainers

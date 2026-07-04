@@ -2,7 +2,7 @@
 
 ## Classification
 
-- Repository: `cloud-itonami-6499`
+- Repository: `cloud-itonami-isic-6499`
 - ISIC Rev.5: `6499`
 - Activity: other financial service activities not elsewhere classified, except insurance and pension funding (e.g. factoring, check-cashing, money-order issuance)
 - Social impact: financial inclusion, data sovereignty, transparent audit
