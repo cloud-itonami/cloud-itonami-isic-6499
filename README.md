@@ -5,10 +5,11 @@ activities, except insurance and pension funding, n.e.c. -- specifically
 the class's own-account-investing member, a **venture capital fund**: deal
 pipeline/sourcing, LP subscription intake, deal due diligence, versioned
 term-sheet negotiation with e-signature execution, capital calls,
-Investment Committee capital deployment, portfolio-company KPI monitoring
-and whole-fund NAV, and exit distribution back to LPs -- crypto-native
-capable (SAFT token deals, on-chain LP settlement) alongside traditional
-equity/SAFE/convertible-note investing.
+Investment Committee capital deployment (initial and follow-on),
+portfolio-company KPI monitoring and whole-fund NAV, exit distribution
+back to LPs, and whole-fund GP-clawback reconciliation and repayment --
+crypto-native capable (SAFT token deals, on-chain LP settlement) alongside
+traditional equity/SAFE/convertible-note investing.
 
 UN ISIC Rev.4's own explanatory note for 6499 names this activity
 explicitly: *"own-account investment activities, such as by venture
@@ -65,20 +66,25 @@ scratch for every new fund.
 ### Actuation
 
 **Calling committed capital in from LPs, committing fund capital into a
-portfolio company, and distributing exit proceeds back to LPs, are never
+portfolio company (initial OR follow-on), distributing exit proceeds back
+to LPs, and a GP repaying clawed-back carry into the fund, are never
 autonomous, at any phase, by construction.** Unlike the life-insurance
 template this repo ports (which has exactly one real-world actuation
-event), a VC fund has **three** independent real-money-movement directions
+event), a VC fund has **four** independent real-money-movement directions
 -- capital coming in from LPs, capital going out to a portfolio company,
-proceeds coming back to LPs -- so `vcfund.governor/high-stakes` has three
-members: `:actuation/call`, `:actuation/deploy` and
-`:actuation/distribute`. Two independent layers enforce this for each
-(`vcfund.governor`'s high-stakes gate and `vcfund.phase`'s phase table,
-which never puts any of the three ops in any phase's `:auto` set) -- see
-`vcfund.phase`'s docstring and `test/vcfund/phase_test.clj`'s
+proceeds coming back to LPs, and clawed-back carry flowing from the GP
+back into the fund -- so `vcfund.governor/high-stakes` has four members:
+`:actuation/call`, `:actuation/deploy`, `:actuation/distribute` and
+`:actuation/clawback` (`:investment/follow-on` deliberately reuses
+`:actuation/deploy` rather than adding a fifth member -- same direction of
+capital travel as an initial commitment). Two independent layers enforce
+this for each (`vcfund.governor`'s high-stakes gate and `vcfund.phase`'s
+phase table, which never puts any of these ops in any phase's `:auto`
+set) -- see `vcfund.phase`'s docstring and `test/vcfund/phase_test.clj`'s
 actuation-never-auto tests. The actor may draft, check, screen and
 recommend; a human Investment Committee is always the one who actually
-calls capital, commits capital or authorizes a distribution.
+calls capital, commits capital (initial or follow-on), authorizes a
+distribution, or approves a GP-clawback repayment.
 
 ## The core contract
 
@@ -94,18 +100,23 @@ LP/deal facts + jurisdiction fund-formation facts (vcfund.facts, spec-cited)
                                  │                  │        └─────────┬──────────┘
                            record + ledger    escalate ─▶ 人間承認 (Investment Committee)
                                                 (ALWAYS for :capital-call/issue,
-                                                 :investment/commit and
-                                                 :exit/distribute)  un-overridable
+                                                 :investment/commit,
+                                                 :investment/follow-on,
+                                                 :exit/distribute and
+                                                 :waterfall/clawback-repay)  un-overridable
 ```
 
-**The DD-LLM never calls capital, commits capital or distributes proceeds
-the InvestmentCommitteeGovernor would reject, and never does any of the
-three without a human Investment Committee sign-off.** Hard violations
-(fabricated fund-formation/DD spec-basis, sanctions hit, incomplete DD,
-missing accredited-investor affirmation, an overcalled LP, an
-investment-commit attempt with no term sheet on file or an unexecuted
-one) force **hold** and *cannot* be approved past; a clean
-call/commitment/distribution proposal still always routes to a human.
+**The DD-LLM never calls capital, commits capital (initial or follow-on),
+distributes proceeds or repays a GP clawback the InvestmentCommittee-
+Governor would reject, and never does any of the four without a human
+Investment Committee sign-off.** Hard violations (fabricated
+fund-formation/DD spec-basis, sanctions hit, incomplete DD, missing
+accredited-investor affirmation, an overcalled LP, an investment-commit
+attempt with no term sheet on file or an unexecuted one, a follow-on
+proposed on a deal never committed, or a clawback repayment exceeding the
+independently-recomputed whole-fund entitlement) force **hold** and
+*cannot* be approved past; a clean call/commitment/follow-on/
+distribution/clawback-repayment proposal still always routes to a human.
 
 ## Crypto-native operation
 
@@ -178,23 +189,23 @@ the same "self-contained sibling" relationship `cloud-itonami-isic-6511`'s
 
 | File | Role |
 |---|---|
-| `src/vcfund/store.cljc` | **Store** protocol -- `MemStore` ‖ `DatomicStore` (`langchain.db`) + append-only audit ledger + capital-call/investment/distribution/portfolio-report/term-sheet/signature history; LPs carry an optional `:wallet-address` |
-| `src/vcfund/registry.cljc` | Capital-call pro-rata allocation + investment-commitment draft records (`:safe`/`:convertible-note`/`:priced-equity`/`:saft`) + exit-distribution waterfall calc (deal-by-deal, documented limitation) + portfolio-report + versioned term-sheet drafts + `term-sheet-diff` redline + e-signature drafts + `fully-executed?` |
+| `src/vcfund/store.cljc` | **Store** protocol -- `MemStore` ‖ `DatomicStore` (`langchain.db`) + append-only audit ledger + capital-call/investment/follow-on/distribution/clawback-repayment/portfolio-report/term-sheet/signature history; LPs carry an optional `:wallet-address` |
+| `src/vcfund/registry.cljc` | Capital-call pro-rata allocation + investment-commitment (initial + follow-on, referencing the original commitment number) draft records (`:safe`/`:convertible-note`/`:priced-equity`/`:saft`) + exit-distribution waterfall calc (deal-by-deal, documented limitation) + GP-clawback-repayment draft + portfolio-report + versioned term-sheet drafts + `term-sheet-diff` redline + e-signature drafts + `fully-executed?` |
 | `src/vcfund/pipeline.cljc` | Pure deal-pipeline funnel model (sourcing → screening → pitched → term-sheet → dd → ic-review), forward-only transitions, `:committed`/`:exited` reachable only via the real capital ops |
 | `src/vcfund/captable.cljc` | Pure SAFE/SAFT conversion, priced-round ownership/dilution (percentage AND absolute share-count terms), option-pool-shuffle, multi-SAFE simultaneous conversion, vesting schedules and option-exercise economics (see docstring for what it deliberately does NOT model) |
 | `src/vcfund/nav.cljc` | Pure whole-fund NAV + unfunded-commitment + management-fee-accrual calculator, plus a store-aware `fund-nav-report` adapter |
 | `src/vcfund/waterfall.cljc` | Pure whole-fund (European-style) waterfall reconciliation + GP-clawback calculator, plus a store-aware `whole-fund-waterfall-report` adapter |
 | `src/vcfund/facts.cljc` | Per-jurisdiction fund-formation/exemption-regime catalog with an official spec-basis citation per entry, honest coverage reporting |
-| `src/vcfund/ddllm.cljc` | **DD-LLM Advisor** -- `mock-advisor` ‖ `llm-advisor`; LP-intake/DD/KYC/stage-advance/term-sheet-propose(+redline)/term-sheet-sign/capital-call/commitment/portfolio-report/distribution proposals |
-| `src/vcfund/governor.cljc` | **InvestmentCommitteeGovernor** -- 12 checks: spec-basis · sanctions hold · DD-complete · stage-insufficient · stage-transition · term-sheet-missing · term-sheet-not-executed · term-sheet-after-commitment · accredited-investor · capital-call overcall · portfolio-report-requires-commitment · confidence/triple-actuation gate |
-| `src/vcfund/phase.cljc` | **Phase 0→3** -- read-only → assisted intake → assisted DD/screen → supervised (call/commit/distribute always human; stage-advance/term-sheet-propose/term-sheet-sign/portfolio-report auto-eligible, no capital risk) |
+| `src/vcfund/ddllm.cljc` | **DD-LLM Advisor** -- `mock-advisor` ‖ `llm-advisor`; LP-intake/DD/KYC/stage-advance/term-sheet-propose(+redline)/term-sheet-sign/capital-call/commitment/follow-on/portfolio-report/distribution/clawback-repayment proposals |
+| `src/vcfund/governor.cljc` | **InvestmentCommitteeGovernor** -- 14 HARD checks + 1 soft: spec-basis · sanctions hold · DD-complete · stage-insufficient · stage-transition · term-sheet-missing · term-sheet-not-executed · term-sheet-after-commitment · accredited-investor · capital-call overcall · portfolio-report-requires-commitment · follow-on-requires-prior-commitment · commitment-missing · clawback-exceeds-entitlement · confidence/quadruple-actuation gate |
+| `src/vcfund/phase.cljc` | **Phase 0→3** -- read-only → assisted intake → assisted DD/screen → supervised (call/commit/follow-on/distribute/clawback-repay always human; stage-advance/term-sheet-propose/term-sheet-sign/portfolio-report auto-eligible, no capital risk) |
 | `src/vcfund/operation.cljc` | **OperationActor** -- langgraph-clj StateGraph |
 | `src/vcfund/sim.cljc` | demo driver |
 | `test/vcfund/*_test.clj` | governor contract · phase invariants · store parity · registry conformance · pipeline/captable/nav/waterfall unit tests · facts coverage |
 
 ## Business-process coverage (honest)
 
-This actor covers **nine governed decision gates** in a VC fund's
+This actor covers **eleven governed decision gates** in a VC fund's
 lifecycle, a pipeline/cap-table/NAV/whole-fund-waterfall calculator layer,
 plus the audit ledger. It does **not** cover the surrounding day-to-day
 fund operations. Stated plainly so nobody mistakes gate coverage for full
@@ -204,18 +215,18 @@ fund-administration coverage:
 |---|---|
 | Deal pipeline: sourcing → screening → pitched → term-sheet → dd → ic-review, forward-only, illegal transitions HARD-blocked (`vcfund.pipeline`) | Fund formation, LPA drafting, fund closes, side letters |
 | LP subscription intake + fund-wide accredited-investor gate | Term-sheet *redlining UI*/real e-signature integration (DocuSign etc.) -- `vcfund.registry/term-sheet-diff` computes the redline and `:term-sheet/sign` tracks execution state, but there's no document-rendering/markup UI or actual e-signature provider wired in |
-| Versioned term-sheet negotiation rounds with field-level redline diffs, AND two-sided e-signature execution tracking (`:term-sheet/propose`/`:term-sheet/sign`; `:investment/commit` requires the LATEST version to be signed by BOTH `:fund` and `:founder`, not merely proposed) | A real clawback REPAYMENT act -- `vcfund.waterfall` computes what the GP owes back; actually moving that money is not a governed op here |
-| Capital calls, pro-rata by commitment share, overcall-blocked | Multi-SAFE conversion assumes one shared `pre-conversion-shares` baseline, not a fully order-dependent simultaneous solve (`vcfund.captable`, see its docstring) |
-| Deal DD checklist vs. named jurisdiction spec-basis, AND a HARD gate that `:investment/commit` requires the deal to have actually reached `:ic-review` in the pipeline | Follow-on investment decisions (modeled today as: source a new deal record for the follow-on round, run it through the same DD→commit lifecycle -- no dedicated "follow-on" op) |
-| AML/sanctions screening (LPs, founders; wallet addresses screen the same way as passport numbers, see "Crypto-native operation") | Board seats / governance rights administration |
-| Investment-Committee capital deployment (`:safe`/`:convertible-note`/`:priced-equity`/`:saft`) | Management-fee schedule step-downs after the investment period, vesting acceleration on change-of-control, option tax treatment (ISO/NSO/AMT) -- all flat/simplified, see `vcfund.nav`/`vcfund.captable` docstrings |
-| Portfolio-company KPI/board reporting for committed deals (`:portfolio/report`, HARD-gated on the deal actually being committed) | Multi-currency FX conversion (`vcfund.nav`/`vcfund.waterfall` assume one fund base currency; a stablecoin-denominated fund works as long as it's the ONE base currency) |
-| SAFE/SAFT-conversion, priced-round ownership/dilution (percentage AND absolute share-count terms), option-pool-shuffle, multi-SAFE simultaneous conversion, vesting schedules and option-exercise economics (`vcfund.captable`) | Tax reporting (K-1s etc.), regulatory filings (Form D/ADV), real fund-accounting-system integration |
+| Versioned term-sheet negotiation rounds with field-level redline diffs, AND two-sided e-signature execution tracking (`:term-sheet/propose`/`:term-sheet/sign`; `:investment/commit` requires the LATEST version to be signed by BOTH `:fund` and `:founder`, not merely proposed) | Multi-SAFE conversion assumes one shared `pre-conversion-shares` baseline, not a fully order-dependent simultaneous solve (`vcfund.captable`, see its docstring) |
+| Capital calls, pro-rata by commitment share, overcall-blocked | Board seats / governance rights administration |
+| Deal DD checklist vs. named jurisdiction spec-basis, AND a HARD gate that `:investment/commit` requires the deal to have actually reached `:ic-review` in the pipeline | Management-fee schedule step-downs after the investment period, vesting acceleration on change-of-control, option tax treatment (ISO/NSO/AMT) -- all flat/simplified, see `vcfund.nav`/`vcfund.captable` docstrings |
+| AML/sanctions screening (LPs, founders; wallet addresses screen the same way as passport numbers, see "Crypto-native operation") | Multi-currency FX conversion (`vcfund.nav`/`vcfund.waterfall` assume one fund base currency; a stablecoin-denominated fund works as long as it's the ONE base currency) |
+| Investment-Committee capital deployment (`:safe`/`:convertible-note`/`:priced-equity`/`:saft`), initial AND dedicated follow-on (`:investment/follow-on`, HARD-gated on the deal already being `:committed`, referencing the original commitment number so the audit trail links every tranche back to the deal's first investment) | Tax reporting (K-1s etc.), regulatory filings (Form D/ADV), real fund-accounting-system integration |
+| Portfolio-company KPI/board reporting for committed deals (`:portfolio/report`, HARD-gated on the deal actually being committed) | |
+| SAFE/SAFT-conversion, priced-round ownership/dilution (percentage AND absolute share-count terms), option-pool-shuffle, multi-SAFE simultaneous conversion, vesting schedules and option-exercise economics (`vcfund.captable`) | |
 | Whole-fund NAV, unfunded-commitment and management-fee-accrual reporting (`vcfund.nav`, fair value defaults to cost basis until a `:fair-value-mark` KPI is recorded) | |
-| Whole-fund (European-style) waterfall reconciliation + GP-clawback calculation against deal-by-deal carry already paid (`vcfund.waterfall`) | |
+| Whole-fund (European-style) waterfall reconciliation + a real, governed GP-clawback REPAYMENT act (`:waterfall/clawback-repay`, HARD-gated on the requested amount never exceeding the INDEPENDENTLY recomputed `vcfund.waterfall/whole-fund-waterfall-report` entitlement -- the governor never trusts the proposal's self-reported figure) | |
 | Exit-proceeds waterfall (deal-by-deal: return of capital → preferred return → GP carry -- what actually pays out; `vcfund.waterfall` reconciles against it, doesn't replace it) | |
 | Crypto-native: `:saft` security type, `vcfund.captable/saft-conversion` (token-allocation-% math), LP `:wallet-address` for on-chain settlement (see "Crypto-native operation") | |
-| Immutable audit ledger for every call/commit/report/distribute/term-sheet/signature decision | |
+| Immutable audit ledger for every call/commit/follow-on/report/distribute/clawback-repay/term-sheet/signature decision | |
 
 Extending coverage is additive, the same discipline as jurisdiction
 coverage: add the next gate as its own governed op (or calculator module,
@@ -226,8 +237,9 @@ calls, then pipeline/portfolio-monitoring/cap-table math, then whole-fund
 NAV/absolute share counts/term-sheet negotiation, then management-fee
 accrual and whole-fund-waterfall/GP-clawback reconciliation, then
 term-sheet e-signature execution/redlining, cap-table vesting/option/
-multi-SAFE math, and crypto-native SAFT/wallet support, were the additions
-beyond the initial four-gate R0.
+multi-SAFE math, and crypto-native SAFT/wallet support, then a dedicated
+follow-on-investment op and a real governed GP-clawback-repayment op, were
+the additions beyond the initial four-gate R0.
 
 ## Jurisdiction coverage (honest)
 

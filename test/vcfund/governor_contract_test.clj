@@ -12,6 +12,7 @@
   (:require [clojure.test :refer [deftest is testing]]
             [langgraph.graph :as g]
             [vcfund.store :as store]
+            [vcfund.waterfall :as waterfall]
             [vcfund.operation :as op]))
 
 (defn- fresh []
@@ -323,6 +324,75 @@
       (is (= :hold (get-in r2 [:state :disposition])))
       (is (empty? (store/commitment-history db)) "nothing committed on reject"))))
 
+(deftest follow-on-requires-prior-commitment-is-held
+  (testing "a follow-on proposed on a deal never committed (still :sourced) -> HARD hold"
+    (let [[db actor] (fresh)
+          res (exec-op actor "t50" {:op :investment/follow-on :subject "deal-1"
+                                    :security-type :priced-equity :amount 500000} operator)]
+      (is (= :hold (get-in res [:state :disposition])))
+      (is (some #{:follow-on-requires-prior-commitment} (-> (store/ledger db) first :basis)))
+      (is (empty? (store/follow-on-history-of db "deal-1"))))))
+
+(deftest follow-on-blocked-by-an-unaccredited-lp-fund-wide
+  (testing "a follow-on cannot be deployed while ANY LP in the fund lacks accreditation, even into an already-committed deal"
+    (let [[db actor] (fresh)
+          _ (exec-op actor "t51a" {:op :dd/assess :subject "deal-1"} operator)
+          _ (approve! actor "t51a")
+          _ (exec-op actor "t51c" {:op :deal/advance-stage :subject "deal-1" :to-stage :ic-review} operator)
+          _ (exec-op actor "t51e" {:op :term-sheet/propose :subject "deal-1" :proposed-by :fund
+                                   :terms {:valuation 8000000 :security-type :safe}} operator)
+          _ (exec-op actor "t51f" {:op :term-sheet/sign :subject "deal-1" :signed-by :fund} operator)
+          _ (exec-op actor "t51g" {:op :term-sheet/sign :subject "deal-1" :signed-by :founder} operator)
+          _ (exec-op actor "t51b" {:op :investment/commit :subject "deal-1"} operator)
+          _ (approve! actor "t51b")]
+      (store/with-lps db {"lp-3" {:id "lp-3" :name "Unaffirmed LP" :commitment-amount 250000
+                                  :called-amount 0 :currency "USD" :jurisdiction "USA"
+                                  :accredited? false :status :pending}})
+      (let [res (exec-op actor "t51" {:op :investment/follow-on :subject "deal-1"
+                                      :security-type :priced-equity :amount 500000} operator)]
+        (is (= :hold (get-in res [:state :disposition])))
+        (is (some #{:accredited-investor-violation} (-> (store/ledger db) last :basis)))
+        (is (empty? (store/follow-on-history-of db "deal-1")))))))
+
+(deftest investment-follow-on-always-escalates-then-human-decides
+  (testing "a clean follow-on into an already-committed deal still ALWAYS interrupts for human approval -- actuation/deploy is never auto"
+    (let [[db actor] (fresh)
+          _ (exec-op actor "t52a" {:op :dd/assess :subject "deal-1"} operator)
+          _ (approve! actor "t52a")
+          _ (exec-op actor "t52c" {:op :deal/advance-stage :subject "deal-1" :to-stage :ic-review} operator)
+          _ (exec-op actor "t52e" {:op :term-sheet/propose :subject "deal-1" :proposed-by :fund
+                                   :terms {:valuation 8000000 :security-type :safe}} operator)
+          _ (exec-op actor "t52f" {:op :term-sheet/sign :subject "deal-1" :signed-by :fund} operator)
+          _ (exec-op actor "t52g" {:op :term-sheet/sign :subject "deal-1" :signed-by :founder} operator)
+          _ (exec-op actor "t52b" {:op :investment/commit :subject "deal-1"} operator)
+          _ (approve! actor "t52b")
+          r1 (exec-op actor "t52" {:op :investment/follow-on :subject "deal-1"
+                                   :security-type :priced-equity :amount 500000} operator)]
+      (is (= :interrupted (:status r1)) "pauses for human approval even when governor-clean")
+      (testing "approve -> commit, follow-on record drafted"
+        (let [r2 (approve! actor "t52")]
+          (is (= :commit (get-in r2 [:state :disposition])))
+          (is (= 1 (count (store/follow-on-history-of db "deal-1"))))
+          (is (= :committed (:status (store/deal db "deal-1")))
+              "a follow-on does not change the deal's lifecycle status")))))
+  (testing "reject -> hold, nothing follow-on committed"
+    (let [[db actor] (fresh)
+          _ (exec-op actor "t53a" {:op :dd/assess :subject "deal-1"} operator)
+          _ (approve! actor "t53a")
+          _ (exec-op actor "t53c" {:op :deal/advance-stage :subject "deal-1" :to-stage :ic-review} operator)
+          _ (exec-op actor "t53e" {:op :term-sheet/propose :subject "deal-1" :proposed-by :fund
+                                   :terms {:valuation 8000000 :security-type :safe}} operator)
+          _ (exec-op actor "t53f" {:op :term-sheet/sign :subject "deal-1" :signed-by :fund} operator)
+          _ (exec-op actor "t53g" {:op :term-sheet/sign :subject "deal-1" :signed-by :founder} operator)
+          _ (exec-op actor "t53b" {:op :investment/commit :subject "deal-1"} operator)
+          _ (approve! actor "t53b")
+          _ (exec-op actor "t53" {:op :investment/follow-on :subject "deal-1"
+                                  :security-type :priced-equity :amount 500000} operator)
+          r2 (g/run* actor {:approval {:status :rejected :by "op-1"}}
+                     {:thread-id "t53" :resume? true})]
+      (is (= :hold (get-in r2 [:state :disposition])))
+      (is (empty? (store/follow-on-history-of db "deal-1")) "nothing follow-on committed on reject"))))
+
 (deftest exit-distribute-always-escalates-then-human-decides
   (testing "a clean exit distribution still ALWAYS interrupts for human approval -- actuation/distribute is never auto"
     (let [[db actor] (fresh)
@@ -342,6 +412,66 @@
         (is (= :commit (get-in r2 [:state :disposition])))
         (is (= :exited (:status (store/deal db "deal-1"))))
         (is (= 1 (count (store/distribution-history db))))))))
+
+(deftest clawback-repay-exceeding-entitlement-is-held
+  (testing "a repayment request larger than the independently-recomputed whole-fund clawback -> HARD hold"
+    (let [[db actor] (fresh)
+          res (exec-op actor "t40" {:op :waterfall/clawback-repay :subject "fund"
+                                    :amount 1000 :effective-date "2026-07-06"
+                                    :fund-life-years 3} operator)]
+      (is (= :hold (get-in res [:state :disposition]))
+          "a fresh fund has paid zero GP carry so far -> zero clawback owed, any positive repayment exceeds it")
+      (is (some #{:clawback-exceeds-entitlement} (-> (store/ledger db) first :basis)))
+      (is (empty? (store/clawback-repayment-history db))))))
+
+(defn- run-commit-and-exit!
+  "Shared setup for the clawback tests: DD -> KYC -> IC review -> term sheet
+  negotiated + fully executed -> commit -> exit distribution, all approved,
+  so `deal-1` has real distribution history for the whole-fund waterfall to
+  reconcile against."
+  [actor prefix]
+  (exec-op actor (str prefix "a") {:op :dd/assess :subject "deal-1"} operator)
+  (approve! actor (str prefix "a"))
+  (exec-op actor (str prefix "c") {:op :deal/advance-stage :subject "deal-1" :to-stage :ic-review} operator)
+  (exec-op actor (str prefix "e") {:op :term-sheet/propose :subject "deal-1" :proposed-by :fund
+                                   :terms {:valuation 8000000 :security-type :safe}} operator)
+  (exec-op actor (str prefix "f") {:op :term-sheet/sign :subject "deal-1" :signed-by :fund} operator)
+  (exec-op actor (str prefix "g") {:op :term-sheet/sign :subject "deal-1" :signed-by :founder} operator)
+  (exec-op actor (str prefix "b") {:op :investment/commit :subject "deal-1"} operator)
+  (approve! actor (str prefix "b"))
+  (exec-op actor (str prefix "h") {:op :exit/distribute :subject "deal-1"
+                                   :exit-proceeds 12000000 :holding-period-years 3} operator)
+  (approve! actor (str prefix "h")))
+
+(deftest waterfall-clawback-repay-always-escalates-then-human-decides
+  (testing "a clean clawback repayment (amount within the recomputed entitlement) still ALWAYS interrupts for human approval -- actuation/clawback is never auto"
+    (let [[db actor] (fresh)
+          _ (run-commit-and-exit! actor "t41")
+          ;; a long fund-life stretches the whole-fund preferred hurdle far past
+          ;; the actual profit, collapsing the whole-fund GP entitlement toward
+          ;; zero -- everything the GP was already paid deal-by-deal becomes
+          ;; clawback, an amount independently recomputed here, never invented.
+          {:keys [gp-clawback]} (waterfall/whole-fund-waterfall-report db 100)
+          r1 (exec-op actor "t41" {:op :waterfall/clawback-repay :subject "fund"
+                                   :amount gp-clawback :effective-date "2026-07-06"
+                                   :fund-life-years 100} operator)]
+      (is (pos? gp-clawback) "sanity: this scenario actually owes a clawback")
+      (is (= :interrupted (:status r1)) "pauses for human approval even when governor-clean")
+      (testing "approve -> commit, clawback-repayment record drafted"
+        (let [r2 (approve! actor "t41")]
+          (is (= :commit (get-in r2 [:state :disposition])))
+          (is (= 1 (count (store/clawback-repayment-history db))))))))
+  (testing "reject -> hold, nothing repaid"
+    (let [[db actor] (fresh)
+          _ (run-commit-and-exit! actor "t42")
+          {:keys [gp-clawback]} (waterfall/whole-fund-waterfall-report db 100)
+          _ (exec-op actor "t42" {:op :waterfall/clawback-repay :subject "fund"
+                                  :amount gp-clawback :effective-date "2026-07-06"
+                                  :fund-life-years 100} operator)
+          r2 (g/run* actor {:approval {:status :rejected :by "op-1"}}
+                     {:thread-id "t42" :resume? true})]
+      (is (= :hold (get-in r2 [:state :disposition])))
+      (is (empty? (store/clawback-repayment-history db)) "nothing repaid on reject"))))
 
 (deftest every-decision-leaves-one-ledger-fact
   (testing "write-only-through-ledger: N operations -> N ledger facts"

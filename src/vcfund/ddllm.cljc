@@ -30,6 +30,7 @@
             [vcfund.pipeline :as pipeline]
             [vcfund.registry :as registry]
             [vcfund.store :as store]
+            [vcfund.waterfall :as waterfall]
             [langchain.model :as model]))
 
 (defn- normalize-lp-intake
@@ -263,6 +264,59 @@
      :stake      :actuation/deploy
      :confidence (if docs-ok? 0.9 0.3)}))
 
+(defn- propose-follow-on
+  "Draft a FOLLOW-ON investment-commitment action -- deploying ADDITIONAL
+  real fund capital into a portfolio company the fund ALREADY holds an
+  initial commitment in (a later round, exercising pro-rata or otherwise).
+  `:security-type`/`:amount` are REAL external facts about the new round
+  supplied by the caller, never invented here. ALWAYS `:stake
+  :actuation/deploy` -- same direction of capital travel as an initial
+  commitment (deploying INTO a portfolio company), so it reuses that
+  stake rather than adding a new one; a REAL-WORLD act, never a draft the
+  actor may auto-run. See README `Actuation`."
+  [db {:keys [subject security-type amount]}]
+  (let [d (store/deal db subject)
+        original (store/commitment-of db subject)
+        committed? (= :committed (:status d))]
+    {:summary    (str (:portfolio-company d) " へのfollow-on投資 " amount " を提案"
+                      (when-not committed? " (既存commitmentが無い、または既にexit済み)"))
+     :rationale  (if committed?
+                   (str "既存commitment record_id: " (get original "record_id"))
+                   "既存commitmentが無い、または既にexit済みの案件へのfollow-on提案")
+     :cites      (if committed? [(get original "record_id")] [])
+     :effect     :investment/follow-on-committed
+     :value      {:deal-id subject :security-type security-type :amount amount}
+     :stake      :actuation/deploy
+     :confidence (if committed? 0.9 0.2)}))
+
+(defn- propose-clawback-repayment
+  "Draft a GP-clawback repayment action -- the GP actually returning
+  capital to the fund that `vcfund.waterfall/whole-fund-waterfall-report`
+  determines they were paid, deal-by-deal, in excess of the fund's
+  aggregate (whole-fund) entitlement. `:amount`/`:effective-date`/
+  `:fund-life-years` are REAL external facts supplied by the caller (an
+  actual GP repayment instruction and how long the fund has been alive),
+  never invented here; `vcfund.governor`'s `clawback-exceeds-entitlement-
+  violations` independently recomputes the whole-fund waterfall and
+  rejects any requested amount above the computed `:gp-clawback`, never
+  trusting this proposal's figure alone. ALWAYS `:stake
+  :actuation/clawback` -- the one direction of capital travel that flows
+  FROM the GP INTO the fund, the mirror image of every other actuation
+  here."
+  [db {:keys [amount effective-date fund-life-years]}]
+  (let [{:keys [gp-clawback] :as wf} (waterfall/whole-fund-waterfall-report db fund-life-years)
+        exceeds? (> (double amount) (+ (double gp-clawback) 1e-6))]
+    {:summary    (str "GP clawback返金 " amount " を提案 (算定額 " gp-clawback ")"
+                      (when exceeds? " (算定clawback額を超過)"))
+     :rationale  (if exceeds?
+                   "要求額が独立算定したwhole-fund clawback額を超過"
+                   (str "whole-fund waterfall再計算: " (pr-str wf)))
+     :cites      [:whole-fund-waterfall]
+     :effect     :waterfall/clawback-repaid
+     :value      {:amount amount :effective-date effective-date}
+     :stake      :actuation/clawback
+     :confidence (if exceeds? 0.2 0.9)}))
+
 (defn- propose-distribute
   "Draft the exit-distribution action -- returning real proceeds to LPs.
   `:exit-proceeds`/`:holding-period-years` are REAL external facts supplied
@@ -296,8 +350,10 @@
     :term-sheet/sign    (propose-term-sheet-signature db request)
     :capital-call/issue (propose-capital-call db request)
     :investment/commit  (propose-commit db request)
+    :investment/follow-on (propose-follow-on db request)
     :portfolio/report   (propose-portfolio-report db request)
     :exit/distribute    (propose-distribute db request)
+    :waterfall/clawback-repay (propose-clawback-repayment db request)
     {:summary "未対応の操作" :rationale (str op) :cites []
      :effect :noop :stake nil :confidence 0.0}))
 
@@ -318,8 +374,10 @@
        ":cites(使った事実キーのベクタ) "
        ":effect(:lp/upsert|:assessment/set|:kyc/set|:deal/advance-stage|"
        ":term-sheet/proposed|:term-sheet/signed|:capital-call/mark-issued|"
-       ":investment/mark-committed|:portfolio/report-logged|:distribution/mark-paid) "
-       ":stake(:actuation/call|:actuation/deploy|:actuation/distribute|nil) :confidence(0..1)。\n"
+       ":investment/mark-committed|:investment/follow-on-committed|"
+       ":portfolio/report-logged|:distribution/mark-paid|:waterfall/clawback-repaid) "
+       ":stake(:actuation/call|:actuation/deploy|:actuation/distribute|"
+       ":actuation/clawback|nil) :confidence(0..1)。\n"
        "重要: 登録されていない法域のfund-formation/exemption要件を絶対に創作してはいけません。"
        "spec-basisが無い場合は :cites を空にし confidence を上げないこと。"))
 
@@ -335,9 +393,13 @@
     :capital-call/issue {:deal (store/deal st subject) :lps (store/all-lps st)}
     :investment/commit  {:deal (store/deal st subject)
                          :assessment (store/assessment-of st subject)}
+    :investment/follow-on {:deal (store/deal st subject)
+                           :commitment (store/commitment-of st subject)}
     :portfolio/report   {:deal (store/deal st subject)}
     :exit/distribute    {:deal (store/deal st subject)
                          :commitment (store/commitment-of st subject)}
+    :waterfall/clawback-repay {:commitment-history (store/commitment-history st)
+                               :distribution-history (store/distribution-history st)}
     {:deal (store/deal st subject)}))
 
 (defn- parse-proposal

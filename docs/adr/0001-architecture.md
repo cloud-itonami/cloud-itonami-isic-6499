@@ -435,3 +435,83 @@ a dedicated follow-on-investment op, board-seat/governance-rights
 administration, management-fee step-downs, vesting acceleration/option
 tax treatment, multi-currency FX, an actual GP-clawback repayment op,
 tax/regulatory reporting.
+
+## Addendum 6 (2026-07-06, same day, autonomous /loop iteration): dedicated follow-on-investment op, real GP-clawback-repayment op
+
+No new explicit owner direction this iteration -- the recurring `/loop`
+prompt asked for coverage/maturity improvement, so this autonomously
+picked the top two items off Addendum 5's remaining-gaps list: "a
+dedicated follow-on-investment op" and "an actual GP-clawback repayment
+op" (the read-only `vcfund.waterfall` reconciliation from Addendum 4
+finally gets a real, governed capital-movement act on top of it).
+
+- **Follow-on investment** -- new op `:investment/follow-on` (subject =
+  deal-id, `:security-type`/`:amount` real facts about the new round,
+  supplied by the caller, never invented). `vcfund.registry/register-
+  follow-on-commitment` drafts a record whose `original_commitment_number`
+  references the deal's FIRST commitment (`USA-FOLLOWON-00000003` style
+  ids, distinct from the `USA-00000007` initial-commitment numbering), so
+  the audit trail links every tranche back to the deal's original
+  investment rather than reading as an unrelated new commitment.
+  Append-only per-deal history (`vcfund.store/follow-on-history-of`,
+  both backends) parallel to -- not merged into -- `commitment-history`;
+  a follow-on does NOT change the deal's lifecycle `:status` (stays
+  `:committed`), only its commitment history grows. **New HARD check,
+  `follow-on-requires-prior-commitment-violations`** -- the deal must
+  actually be `:committed` (an initial tranche already on file, and not
+  already `:exited`); a follow-on is never a substitute for the first
+  `:investment/commit`. `accredited-investor-violations`'s op set grew to
+  include `:investment/follow-on` (fund-wide accreditation gates
+  deployment regardless of which op deploys it). `:stake` is `:actuation/
+  deploy`, deliberately REUSED rather than a new high-stakes member --
+  same direction of capital travel as an initial commitment.
+- **GP-clawback repayment** -- new op `:waterfall/clawback-repay`
+  (fund-level, not deal-scoped -- `:subject` is the sentinel `"fund"`;
+  `:amount`/`:effective-date`/`:fund-life-years` real facts supplied by
+  the caller). `vcfund.registry/register-clawback-repayment` drafts a
+  `CLAWBACK-000004`-style record. Append-only, fund-level history
+  (`vcfund.store/clawback-repayment-history`, both backends -- NOT
+  per-deal, since a clawback reconciles the WHOLE fund's carry history).
+  **New HARD check, `clawback-exceeds-entitlement-violations`** --
+  recomputes `vcfund.waterfall/whole-fund-waterfall-report`
+  INDEPENDENTLY from live store data and rejects any requested repayment
+  above the actually-computed `:gp-clawback`, never trusting the
+  proposal's self-reported figure (same "never trust the advisor's
+  self-check" discipline as `overcall-violations` recomputing capital-call
+  allocations independently). `high-stakes` grew a FOURTH member,
+  `:actuation/clawback` -- the one direction of capital travel that flows
+  FROM the GP INTO the fund, the mirror image of every other actuation
+  here (`:actuation/call`/`:actuation/deploy`/`:actuation/distribute` all
+  move capital between the fund and LPs/portfolio companies; this one
+  moves it between the fund and the GP).
+- Governor docstring/check-count renumbered: 12 HARD + 1 soft -> 14 HARD +
+  1 soft (fifteen total; the pre-existing `commitment-missing-violations`
+  check for `:exit/distribute` had drifted out of the enumerated docstring
+  list in an earlier addendum and is now correctly listed alongside the
+  two new checks).
+- `vcfund.phase/write-ops` grew to include both new ops; NEITHER was added
+  to any phase's `:auto` set (the same "write-ops membership is not
+  auto-eligibility" invariant every other capital-movement op follows).
+  `vcfund.ddllm` gained `propose-follow-on`/`propose-clawback-repayment`,
+  wired into `infer`/`facts-for`/the system-prompt string.
+
+Consequences: `test/vcfund/*` grew from 112 tests/439 assertions to 126
+tests/521 assertions (new `register-follow-on-commitment`/`register-
+clawback-repayment` validation tests in `registry_test.clj`; follow-on/
+clawback-repay parity tests across both `Store` backends in
+`store_contract_test.clj`; `follow-on-requires-prior-commitment-is-held`,
+`follow-on-blocked-by-an-unaccredited-lp-fund-wide`,
+`investment-follow-on-always-escalates-then-human-decides`,
+`clawback-repay-exceeding-entitlement-is-held` and `waterfall-clawback-
+repay-always-escalates-then-human-decides` in
+`governor_contract_test.clj`; never-auto-at-any-phase structural tests in
+`phase_test.clj`), still lint-clean; demo (`clojure -M:dev:run`) now walks
+a follow-on deployment and a whole-fund clawback reconciliation +
+repayment through the full escalate-then-approve path, plus two new HARD
+holds (a follow-on on a never-committed deal, a clawback request far
+exceeding the recomputed entitlement) that never reach a human. Remaining
+honest gaps (tracked in README's "Business-process coverage" table): a
+real e-signature PROVIDER integration and redlining UI, order-dependent
+multi-SAFE simultaneous-conversion solving, board-seat/governance-rights
+administration, management-fee step-downs, vesting acceleration/option
+tax treatment, multi-currency FX, tax/regulatory reporting.

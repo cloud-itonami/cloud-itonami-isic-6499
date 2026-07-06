@@ -36,8 +36,11 @@
       (is (= [] (store/portfolio-reports-of s "deal-1")))
       (is (= [] (store/term-sheet-history-of s "deal-1")))
       (is (= [] (store/signature-history-of s "deal-1")))
+      (is (= [] (store/follow-on-history-of s "deal-1")))
+      (is (= [] (store/clawback-repayment-history s)))
       (is (zero? (store/next-sequence s "USA")))
-      (is (zero? (store/call-sequence s "USA"))))))
+      (is (zero? (store/call-sequence s "USA")))
+      (is (zero? (store/follow-on-sequence s "USA"))))))
 
 (deftest write-and-ledger-parity
   (doseq [[label s] (backends)]
@@ -88,6 +91,16 @@
         (is (= :committed (:status (store/deal s "deal-1"))))
         (is (= 1 (count (store/commitment-history s))))
         (is (= 1 (store/next-sequence s "USA"))))
+      (testing "follow-on commit drafts a follow-on record referencing the original commitment"
+        (store/commit-record! s {:effect :investment/follow-on-committed :path ["deal-1"]
+                                 :payload {:security-type :priced-equity :amount 500000}})
+        (is (= "USA-FOLLOWON-00000000" (get (first (store/follow-on-history-of s "deal-1")) "record_id")))
+        (is (= "USA-00000000" (get (first (store/follow-on-history-of s "deal-1")) "original_commitment_number")))
+        (is (= "follow-on-commitment-draft" (get (first (store/follow-on-history-of s "deal-1")) "kind")))
+        (is (= :committed (:status (store/deal s "deal-1")))
+            "a follow-on does not change the deal's lifecycle status")
+        (is (= 1 (count (store/follow-on-history-of s "deal-1"))))
+        (is (= 1 (store/follow-on-sequence s "USA"))))
       (testing "portfolio report logs a KPI record for the now-committed deal"
         (store/commit-record! s {:effect :portfolio/report-logged :path ["deal-1"]
                                  :payload {:period "2026-Q3" :kpis {:revenue 450000}}})
@@ -99,6 +112,12 @@
         (is (= "distribution-draft" (get (first (store/distribution-history s)) "kind")))
         (is (= :exited (:status (store/deal s "deal-1"))))
         (is (= 1 (count (store/distribution-history s)))))
+      (testing "clawback repayment drafts a fund-level (not deal-scoped) repayment record"
+        (store/commit-record! s {:effect :waterfall/clawback-repaid
+                                 :payload {:amount 25000 :effective-date "2026-07-06"}})
+        (is (= "CLAWBACK-000000" (get (first (store/clawback-repayment-history s)) "record_id")))
+        (is (= "clawback-repayment-draft" (get (first (store/clawback-repayment-history s)) "kind")))
+        (is (= 1 (count (store/clawback-repayment-history s)))))
       (testing "ledger is append-only and order-preserving"
         (store/append-ledger! s {:op :a :disposition :commit})
         (store/append-ledger! s {:op :b :disposition :hold})

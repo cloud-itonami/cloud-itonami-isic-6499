@@ -40,6 +40,11 @@
 - Investment Committee capital-deployment proposal (requires the deal to
   have actually reached Investment Committee review in the pipeline, and
   the latest term-sheet round to be fully executed, not merely proposed)
+- dedicated follow-on investment-deployment proposal for an already-
+  committed deal, referencing the original commitment number
+- whole-fund GP-clawback reconciliation and a governed repayment proposal,
+  HARD-gated on the requested amount never exceeding the independently
+  recomputed whole-fund entitlement
 - portfolio-company KPI/board-report logging for committed deals
 - SAFE/SAFT-conversion, priced-round ownership/dilution (percentage and
   absolute share-count terms), option-pool-shuffle, multi-SAFE conversion,
@@ -59,12 +64,15 @@
 
 ## Trust Controls
 
-- no capital is called from LPs, committed to a portfolio company, or paid
-  out as an exit distribution without Investment Committee (human) sign-off
+- no capital is called from LPs, committed to a portfolio company (initial
+  or follow-on), paid out as an exit distribution, or repaid by the GP as a
+  clawback, without Investment Committee (human) sign-off
 - a fabricated DD checklist, a sanctions hit, a missing accredited-investor
-  affirmation, a call that would overcall an LP past their commitment, or a
+  affirmation, a call that would overcall an LP past their commitment, a
   commit attempted with no term sheet ever proposed OR with a proposed but
-  unexecuted (not fully signed) term sheet forces a hold, not an override
+  unexecuted (not fully signed) term sheet, a follow-on proposed on a deal
+  never committed, or a clawback repayment exceeding the independently
+  recomputed whole-fund entitlement forces a hold, not an override
 - LP personal/financial data and portfolio-company confidential data stay
   outside Git
 - every call/commitment/distribution path is auditable

@@ -215,6 +215,56 @@
                                                   :preferred-return-rate 0.08 :holding-period-years 1
                                                   :carry-rate 1.5}))))
 
+;; ----------------------------- follow-on commitments -----------------------------
+
+(deftest follow-on-certificate-is-a-draft-not-a-real-commitment
+  (let [result (r/register-follow-on-commitment "Acme AI, Inc." "USA-00000007" :safe 500000 "USA" 0)]
+    (is (nil? (get-in result ["certificate" "proof"])))
+    (is (= (get-in result ["certificate" "issued_by_registry"]) false))
+    (is (= (get-in result ["certificate" "status"]) "draft-unsigned"))))
+
+(deftest follow-on-assigns-follow-on-number-and-references-original
+  (let [result (r/register-follow-on-commitment "Acme AI, Inc." "USA-00000007" :priced-equity 1000000 "USA" 3)]
+    (is (= (get result "follow_on_number") "USA-FOLLOWON-00000003"))
+    (is (= (get-in result ["record" "record_id"]) "USA-FOLLOWON-00000003"))
+    (is (= (get-in result ["record" "original_commitment_number"]) "USA-00000007"))
+    (is (= (get-in result ["record" "kind"]) "follow-on-commitment-draft"))
+    (is (= (get-in result ["record" "immutable"]) true))))
+
+(deftest follow-on-accepts-saft-for-crypto-native-follow-on-rounds
+  (let [result (r/register-follow-on-commitment "Acme Protocol Labs" "USA-00000001" :saft 250000 "USA" 0)]
+    (is (= (get-in result ["record" "security_type"]) "saft"))))
+
+(deftest follow-on-validation-rules
+  (is (thrown? Exception (r/register-follow-on-commitment "" "USA-00000007" :safe 500000 "USA" 0)))
+  (is (thrown? Exception (r/register-follow-on-commitment "Acme" "" :safe 500000 "USA" 0)))
+  (is (thrown? Exception (r/register-follow-on-commitment "Acme" "USA-00000007" :not-a-real-security-type 500000 "USA" 0)))
+  (is (thrown? Exception (r/register-follow-on-commitment "Acme" "USA-00000007" :safe -1 "USA" 0)))
+  (is (thrown? Exception (r/register-follow-on-commitment "Acme" "USA-00000007" :safe 500000 "" 0)))
+  (is (thrown? Exception (r/register-follow-on-commitment "Acme" "USA-00000007" :safe 500000 "USA" -1))))
+
+;; ----------------------------- GP clawback repayment -----------------------------
+
+(deftest clawback-repayment-certificate-is-a-draft-not-a-real-repayment
+  (let [result (r/register-clawback-repayment 100000 0 "2026-07-06")]
+    (is (nil? (get-in result ["certificate" "proof"])))
+    (is (= (get-in result ["certificate" "issued_by_registry"]) false))
+    (is (= (get-in result ["certificate" "status"]) "draft-unsigned"))))
+
+(deftest clawback-repayment-assigns-record-id
+  (let [result (r/register-clawback-repayment 50000 4 "2026-07-06")]
+    (is (= (get-in result ["record" "record_id"]) "CLAWBACK-000004"))
+    (is (close? 50000.0 (get-in result ["record" "amount"])))
+    (is (= (get-in result ["record" "effective_date"]) "2026-07-06"))
+    (is (= (get-in result ["record" "kind"]) "clawback-repayment-draft"))
+    (is (= (get-in result ["record" "immutable"]) true))))
+
+(deftest clawback-repayment-validation-rules
+  (is (thrown? Exception (r/register-clawback-repayment -1 0 "2026-07-06")))
+  (is (thrown? Exception (r/register-clawback-repayment 1000 -1 "2026-07-06")))
+  (is (thrown? Exception (r/register-clawback-repayment 1000 0 nil)))
+  (is (thrown? Exception (r/register-clawback-repayment 1000 0 ""))))
+
 (deftest distribution-is-append-only
   (let [c (r/register-commitment "Acme" :safe 1000000 "USA" 1)
         hist (r/append [] c)

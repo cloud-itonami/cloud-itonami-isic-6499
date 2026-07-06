@@ -4,17 +4,23 @@
   advance to :ic-review (auto-commits, no capital risk) -> term-sheet
   proposal + both-sides e-signature (auto-commit) -> capital-call proposal
   (always escalates) -> human approval -> commit -> investment-commitment
-  proposal (always escalates) -> human approval -> commit -> portfolio KPI
-  report (auto-commits) -> exit-distribution proposal (always escalates)
-  -> human approval -> commit, then shows six HARD holds (a sanctions hit,
-  a fabricated jurisdiction, an overcalled capital call, an illegal
-  pipeline-stage transition, a term-sheet proposal on an already-committed
-  deal, and an investment-commit attempt with an unsigned term sheet) that
-  never reach a human at all, and prints the audit ledger + the draft
-  capital-call/commitment/distribution/portfolio-report/term-sheet
-  records."
+  proposal (always escalates) -> human approval -> commit -> follow-on
+  investment proposal (always escalates) -> human approval -> commit ->
+  portfolio KPI report (auto-commits) -> exit-distribution proposal
+  (always escalates) -> human approval -> commit -> whole-fund GP-clawback
+  reconciliation + repayment proposal (always escalates) -> human approval
+  -> commit, then shows eight HARD holds (a sanctions hit, a fabricated
+  jurisdiction, an overcalled capital call, an illegal pipeline-stage
+  transition, a term-sheet proposal on an already-committed deal, an
+  investment-commit attempt with an unsigned term sheet, a follow-on
+  proposed on a deal that was never committed, and a clawback repayment
+  request exceeding the independently-recomputed whole-fund entitlement)
+  that never reach a human at all, and prints the audit ledger + the
+  draft capital-call/commitment/follow-on/distribution/clawback-repayment/
+  portfolio-report/term-sheet records."
   (:require [langgraph.graph :as g]
             [vcfund.store :as store]
+            [vcfund.waterfall :as waterfall]
             [vcfund.operation :as op]))
 
 (def operator {:actor-id "op-1" :actor-role :investment-committee :phase 3})
@@ -67,6 +73,13 @@
       (println "-- human Investment Committee approves --")
       (println (approve! actor "t4")))
 
+    (println "== investment/follow-on deal-1 (follow-on round, $750,000 priced-equity; always escalates -- actuation/deploy) ==")
+    (let [r (exec! actor "t4a" {:op :investment/follow-on :subject "deal-1"
+                                :security-type :priced-equity :amount 750000} operator)]
+      (println r)
+      (println "-- human Investment Committee approves --")
+      (println (approve! actor "t4a")))
+
     (println "== portfolio/report deal-1 (Q3 KPIs on a committed deal; no capital risk; auto-commits) ==")
     (println (exec! actor "t4b" {:op :portfolio/report :subject "deal-1" :period "2026-Q3"
                                 :kpis {:revenue 450000 :burn-rate 80000 :runway-months 14 :headcount 12}} operator))
@@ -77,6 +90,16 @@
       (println r)
       (println "-- human Investment Committee approves --")
       (println (approve! actor "t5")))
+
+    (println "== waterfall/clawback-repay whole-fund (fund-life stretched to 100y for the demo, so the whole-fund GP entitlement collapses toward zero and the GP owes back what deal-by-deal carry already paid; always escalates -- actuation/clawback) ==")
+    (let [{:keys [gp-clawback] :as wf} (waterfall/whole-fund-waterfall-report db 100)]
+      (println (str "whole-fund waterfall reconciliation: " wf))
+      (let [r (exec! actor "t5a" {:op :waterfall/clawback-repay :subject "fund"
+                                  :amount gp-clawback :effective-date "2026-07-06"
+                                  :fund-life-years 100} operator)]
+        (println r)
+        (println "-- human Investment Committee approves --")
+        (println (approve! actor "t5a"))))
 
     (println "== kyc/screen party-3 (sanctions hit -> HARD hold, never reaches a human) ==")
     (println (exec! actor "t6" {:op :kyc/screen :subject "party-3"} operator))
@@ -100,6 +123,15 @@
                                   :terms {:valuation 1500000}} operator))
     (println (exec! actor "t11" {:op :investment/commit :subject "deal-3"} operator))
 
+    (println "== investment/follow-on deal-2 (deal-2 was never committed -> HARD hold, never reaches a human) ==")
+    (println (exec! actor "t12" {:op :investment/follow-on :subject "deal-2"
+                                 :security-type :priced-equity :amount 100000} operator))
+
+    (println "== waterfall/clawback-repay whole-fund (requesting far more than the independently-recomputed entitlement -> HARD hold) ==")
+    (println (exec! actor "t13" {:op :waterfall/clawback-repay :subject "fund"
+                                 :amount 999999999 :effective-date "2026-07-06"
+                                 :fund-life-years 3} operator))
+
     (println "== audit ledger ==")
     (doseq [f (store/ledger db)] (println f))
 
@@ -108,6 +140,9 @@
 
     (println "== draft investment-commitment records ==")
     (doseq [r (store/commitment-history db)] (println r))
+
+    (println "== draft follow-on investment-commitment records (deal-1) ==")
+    (doseq [r (store/follow-on-history-of db "deal-1")] (println r))
 
     (println "== draft portfolio-report records (deal-1) ==")
     (doseq [r (store/portfolio-reports-of db "deal-1")] (println r))
@@ -119,4 +154,7 @@
     (doseq [r (store/signature-history-of db "deal-1")] (println r))
 
     (println "== draft exit-distribution records ==")
-    (doseq [r (store/distribution-history db)] (println r))))
+    (doseq [r (store/distribution-history db)] (println r))
+
+    (println "== draft GP-clawback-repayment records (fund-level, not deal-scoped) ==")
+    (doseq [r (store/clawback-repayment-history db)] (println r))))

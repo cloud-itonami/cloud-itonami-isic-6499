@@ -43,8 +43,11 @@
   (portfolio-reports-of [s deal-id] "the append-only KPI-report history for one deal, oldest first")
   (term-sheet-history-of [s deal-id] "the append-only versioned term-sheet negotiation history for one deal, oldest first")
   (signature-history-of [s deal-id] "the append-only term-sheet e-signature history for one deal, oldest first")
+  (follow-on-history-of [s deal-id] "the append-only follow-on investment-commitment history for one deal, oldest first")
+  (clawback-repayment-history [s] "the append-only, fund-level (not deal-scoped) GP-clawback-repayment history")
   (next-sequence [s jurisdiction] "next commitment-number sequence for a jurisdiction")
   (call-sequence [s jurisdiction] "next capital-call-number sequence for a jurisdiction")
+  (follow-on-sequence [s jurisdiction] "next follow-on-number sequence for a jurisdiction")
   (commit-record! [s record] "apply a committed op's record to the SSoT")
   (append-ledger! [s fact]   "append one immutable decision fact")
   (with-lps [s lps] "replace/seed the LP directory (map id->lp)")
@@ -109,6 +112,35 @@
      :deal-patch {:status :committed
                   :commitment-number (get result "commitment_number")}}))
 
+(defn- commit-follow-on!
+  "Backend-agnostic follow-on investment commit -- looks up the deal's
+  EXISTING commitment record (required -- a follow-on references the
+  deal's original tranche) and the caller-supplied round facts
+  (`:security-type`/`:amount`, real facts about the new round, never
+  invented here), drafts the follow-on commitment record referencing the
+  original commitment number, and returns {:result ..}. The deal's
+  `:status` stays `:committed` -- a follow-on doesn't change the deal's
+  lifecycle status, only its (append-only) commitment history."
+  [s deal-id {:keys [security-type amount]}]
+  (let [d (deal s deal-id)
+        original (commitment-of s deal-id)
+        seq-n (follow-on-sequence s (:jurisdiction d))
+        result (registry/register-follow-on-commitment
+                (:portfolio-company d) (get original "record_id") security-type amount
+                (:jurisdiction d) seq-n)]
+    {:result result}))
+
+(defn- repay-clawback!
+  "Backend-agnostic GP-clawback repayment -- drafts the repayment record.
+  Pure w.r.t. any particular backend's transaction mechanics; the amount
+  itself is independently re-validated against `vcfund.waterfall` by the
+  governor (`clawback-exceeds-entitlement-violations`) before this ever
+  runs, never trusted from the proposal alone."
+  [s {:keys [amount effective-date]}]
+  (let [seq-n (count (clawback-repayment-history s))
+        result (registry/register-clawback-repayment amount seq-n effective-date)]
+    {:result result}))
+
 (defn- distribute-exit!
   "Backend-agnostic `:distribution/mark-paid` -- looks up the deal's
   committed investment, computes the deal-by-deal waterfall from the
@@ -149,10 +181,14 @@
   (portfolio-reports-of [_ deal-id] (get-in @a [:portfolio-reports deal-id] []))
   (term-sheet-history-of [_ deal-id] (get-in @a [:term-sheets deal-id] []))
   (signature-history-of [_ deal-id] (get-in @a [:term-sheet-signatures deal-id] []))
+  (follow-on-history-of [_ deal-id] (get-in @a [:follow-on-history deal-id] []))
+  (clawback-repayment-history [_] (:clawback-repayment-history @a))
   (next-sequence [_ jurisdiction]
     (get-in @a [:sequences jurisdiction] 0))
   (call-sequence [_ jurisdiction]
     (get-in @a [:call-sequences jurisdiction] 0))
+  (follow-on-sequence [_ jurisdiction]
+    (get-in @a [:follow-on-sequences jurisdiction] 0))
   (commit-record! [s {:keys [effect path value payload]}]
     (case effect
       :lp/upsert
@@ -213,6 +249,15 @@
                        (update :commitment-history registry/append result))))
         result)
 
+      :investment/follow-on-committed
+      (let [deal-id (first path)
+            {:keys [result]} (commit-follow-on! s deal-id payload)]
+        (swap! a (fn [state]
+                   (-> state
+                       (update-in [:follow-on-sequences (:jurisdiction (get-in state [:deals deal-id]))] (fnil inc 0))
+                       (update-in [:follow-on-history deal-id] (fnil registry/append []) result))))
+        result)
+
       :distribution/mark-paid
       (let [deal-id (first path)
             {:keys [result deal-patch]} (distribute-exit! s deal-id payload)]
@@ -220,6 +265,11 @@
                    (-> state
                        (update-in [:deals deal-id] merge deal-patch)
                        (update :distribution-history registry/append result))))
+        result)
+
+      :waterfall/clawback-repaid
+      (let [{:keys [result]} (repay-clawback! s payload)]
+        (swap! a update :clawback-repayment-history registry/append result)
         result)
       nil)
     s)
@@ -233,9 +283,11 @@
   []
   (->MemStore (atom (assoc (demo-data)
                            :assessments {} :kyc {} :ledger [] :sequences {} :call-sequences {}
+                           :follow-on-sequences {}
                            :commitments {} :commitment-history []
                            :capital-call-history [] :distribution-history []
-                           :portfolio-reports {} :term-sheets {} :term-sheet-signatures {}))))
+                           :portfolio-reports {} :term-sheets {} :term-sheet-signatures {}
+                           :follow-on-history {} :clawback-repayment-history []))))
 
 ;; ----------------------------- DatomicStore (langchain.db) -----------------------------
 
@@ -259,7 +311,10 @@
    :call-sequence/jurisdiction {:db/unique :db.unique/identity}
    :portfolio-report/seq {:db/unique :db.unique/identity}
    :term-sheet/seq {:db/unique :db.unique/identity}
-   :term-sheet-signature/seq {:db/unique :db.unique/identity}})
+   :term-sheet-signature/seq {:db/unique :db.unique/identity}
+   :follow-on/seq {:db/unique :db.unique/identity}
+   :follow-on-sequence/jurisdiction {:db/unique :db.unique/identity}
+   :clawback-repayment/seq {:db/unique :db.unique/identity}})
 
 (defn- enc [v] (pr-str v))
 (defn- dec* [s] (when s (edn/read-string s)))
@@ -284,6 +339,18 @@
   `:ledger/seq`-style global-identity convention as `term-sheet-count`."
   [conn]
   (count (d/q '[:find [?s ...] :where [?e :term-sheet-signature/seq ?s]] (d/db conn))))
+
+(defn- follow-on-count
+  "Global count of follow-on-commitment entities across ALL deals -- same
+  `:ledger/seq`-style global-identity convention as `term-sheet-count`."
+  [conn]
+  (count (d/q '[:find [?s ...] :where [?e :follow-on/seq ?s]] (d/db conn))))
+
+(defn- clawback-repayment-count
+  "Global count of GP-clawback-repayment entities -- fund-level, not
+  deal-scoped, so this is already the only count the identity needs."
+  [conn]
+  (count (d/q '[:find [?s ...] :where [?e :clawback-repayment/seq ?s]] (d/db conn))))
 
 (defn- lp->tx [{:keys [id name commitment-amount called-amount currency jurisdiction
                        accredited? status wallet-address]}]
@@ -415,6 +482,18 @@
               (d/db conn) deal-id)
          (sort-by first)
          (mapv (comp dec* second))))
+  (follow-on-history-of [_ deal-id]
+    (->> (d/q '[:find ?s ?r :in $ ?did
+               :where [?e :follow-on/deal-id ?did]
+                      [?e :follow-on/seq ?s]
+                      [?e :follow-on/record ?r]]
+              (d/db conn) deal-id)
+         (sort-by first)
+         (mapv (comp dec* second))))
+  (clawback-repayment-history [_]
+    (->> (d/q '[:find ?s ?r :where [?e :clawback-repayment/seq ?s] [?e :clawback-repayment/record ?r]] (d/db conn))
+         (sort-by first)
+         (mapv (comp dec* second))))
   (next-sequence [_ jurisdiction]
     (or (d/q '[:find ?n . :in $ ?j
               :where [?e :sequence/jurisdiction ?j] [?e :sequence/next ?n]]
@@ -423,6 +502,11 @@
   (call-sequence [_ jurisdiction]
     (or (d/q '[:find ?n . :in $ ?j
               :where [?e :call-sequence/jurisdiction ?j] [?e :call-sequence/next ?n]]
+            (d/db conn) jurisdiction)
+        0))
+  (follow-on-sequence [_ jurisdiction]
+    (or (d/q '[:find ?n . :in $ ?j
+              :where [?e :follow-on-sequence/jurisdiction ?j] [?e :follow-on-sequence/next ?n]]
             (d/db conn) jurisdiction)
         0))
   (commit-record! [s {:keys [effect path value payload]}]
@@ -493,6 +577,18 @@
                        :commitment-history/record (enc (get result "record"))}])
         result)
 
+      :investment/follow-on-committed
+      (let [deal-id (first path)
+            {:keys [result]} (commit-follow-on! s deal-id payload)
+            jurisdiction (:jurisdiction (deal s deal-id))
+            next-n (inc (follow-on-sequence s jurisdiction))]
+        (d/transact! conn
+                     [{:follow-on-sequence/jurisdiction jurisdiction :follow-on-sequence/next next-n}
+                      {:follow-on/seq (follow-on-count conn)
+                       :follow-on/deal-id deal-id
+                       :follow-on/record (enc (get result "record"))}])
+        result)
+
       :distribution/mark-paid
       (let [deal-id (first path)
             {:keys [result deal-patch]} (distribute-exit! s deal-id payload)]
@@ -500,6 +596,12 @@
                      [(deal->tx (assoc deal-patch :id deal-id))
                       {:distribution-history/seq (count (distribution-history s))
                        :distribution-history/record (enc (get result "record"))}])
+        result)
+
+      :waterfall/clawback-repaid
+      (let [{:keys [result]} (repay-clawback! s payload)]
+        (d/transact! conn [{:clawback-repayment/seq (clawback-repayment-count conn)
+                           :clawback-repayment/record (enc (get result "record"))}])
         result)
       nil)
     s)

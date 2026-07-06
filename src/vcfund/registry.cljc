@@ -1,6 +1,7 @@
 (ns vcfund.registry
-  "Pure-function capital-call, investment-commitment, exit-distribution and
-  portfolio-report record construction -- an append-only venture-fund
+  "Pure-function capital-call, investment-commitment (initial AND
+  follow-on), exit-distribution, GP-clawback-repayment and portfolio-report
+  record construction -- an append-only venture-fund
   capital-movement/monitoring draft.
 
   Like `cloud-itonami-isic-6511`'s `underwriting.registry`, there is no
@@ -59,6 +60,40 @@
                 "immutable" true}]
     {"record" record "commitment_number" commitment-number
      "certificate" (unsigned-certificate "InvestmentCommitmentCertificate" commitment-number commitment-number)}))
+
+(defn register-follow-on-commitment
+  "Validate + construct a FOLLOW-ON investment-commitment registration
+  DRAFT -- deploying additional fund capital into a portfolio company the
+  fund ALREADY holds an initial commitment in (a later round, exercising
+  pro-rata or otherwise). Distinct from `register-commitment`: it
+  references `original-commitment-number` so the audit trail links every
+  tranche back to the deal's first investment, rather than looking like
+  an unrelated new commitment. Pure function -- does not touch any real
+  fund-accounting/cap-table system or wire any real capital."
+  [portfolio-company original-commitment-number security-type amount jurisdiction sequence]
+  (when-not (and portfolio-company (not= portfolio-company ""))
+    (throw (ex-info "follow-on: portfolio-company required" {})))
+  (when-not (and original-commitment-number (not= original-commitment-number ""))
+    (throw (ex-info "follow-on: original-commitment-number required" {})))
+  (when-not (contains? #{:safe :convertible-note :priced-equity :saft} security-type)
+    (throw (ex-info "follow-on: security-type must be :safe, :convertible-note, :priced-equity or :saft" {})))
+  (when (< amount 0)
+    (throw (ex-info "follow-on: amount must be >= 0" {})))
+  (when-not (and jurisdiction (not= jurisdiction ""))
+    (throw (ex-info "follow-on: jurisdiction required" {})))
+  (when (< sequence 0)
+    (throw (ex-info "follow-on: sequence must be >= 0" {})))
+  (let [follow-on-number (str (str/upper-case jurisdiction) "-FOLLOWON-" (zero-pad sequence 8))
+        record {"record_id" follow-on-number
+                "kind" "follow-on-commitment-draft"
+                "portfolio_company" portfolio-company
+                "original_commitment_number" original-commitment-number
+                "security_type" (name security-type)
+                "amount" amount
+                "jurisdiction" jurisdiction
+                "immutable" true}]
+    {"record" record "follow_on_number" follow-on-number
+     "certificate" (unsigned-certificate "FollowOnCommitmentCertificate" follow-on-number follow-on-number)}))
 
 (def default-notice-period-days
   "Standard capital-call notice period -- an LP must fund a call within
@@ -296,6 +331,30 @@
                             (map #(get % "signed_by")))
                       signatures)]
     (and (contains? signers "fund") (contains? signers "founder"))))
+
+(defn register-clawback-repayment
+  "Validate + construct a GP-clawback repayment DRAFT -- the GP actually
+  returning capital to the fund that `vcfund.waterfall/whole-fund-
+  waterfall` determined they were paid, deal-by-deal, in excess of the
+  fund's aggregate (whole-fund) entitlement. Fund-level, not deal-scoped
+  (a clawback reconciles the WHOLE fund's carry history, not one deal).
+  Pure function -- does not move any real capital; it builds the RECORD
+  an operator would keep, matching the discipline every other `register-*`
+  fn in this namespace follows."
+  [amount sequence effective-date]
+  (when (neg? amount)
+    (throw (ex-info "clawback-repayment: amount must be >= 0" {})))
+  (when (< sequence 0)
+    (throw (ex-info "clawback-repayment: sequence must be >= 0" {})))
+  (when-not (and effective-date (not= effective-date ""))
+    (throw (ex-info "clawback-repayment: effective-date required" {})))
+  (let [record-id (str "CLAWBACK-" (zero-pad sequence 6))]
+    {"record" {"record_id" record-id
+              "kind" "clawback-repayment-draft"
+              "amount" (double amount)
+              "effective_date" effective-date
+              "immutable" true}
+     "certificate" (unsigned-certificate "ClawbackRepaymentCertificate" record-id record-id)}))
 
 (defn append
   "Append a commitment/distribution record, returning a NEW list (never

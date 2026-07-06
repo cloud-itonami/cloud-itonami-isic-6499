@@ -8,21 +8,25 @@
   UnderwritingGovernor, `cloud-itonami-M6910`'s RegistrarGovernor and
   `cloud-itonami-L6810`'s RealtorGovernor.
 
-  Twelve checks, in priority order. The first eleven are HARD violations: a
-  human approver CANNOT override them (you don't get to approve your way
-  past a sanctions hit, a fabricated fund-formation spec-basis, incomplete
-  DD, an LP missing an accredited-investor affirmation, a capital call
-  that would overcall an LP past their commitment, an illegal pipeline-
-  stage transition, a commit attempted before Investment Committee review,
-  before any term sheet was ever proposed, or before the latest term sheet
-  is FULLY EXECUTED (both sides signed), a term sheet proposed after
-  capital is already committed, or a portfolio report on a deal that was
-  never actually committed). The last is SOFT: it asks a human to look
-  (low confidence / actuation), and the human may approve -- but see
-  `vcfund.phase`: for `:capital-call/issue`, `:investment/commit` and
-  `:exit/distribute` (real capital movement, in any of the three
+  Fifteen checks, in priority order. The first fourteen are HARD
+  violations: a human approver CANNOT override them (you don't get to
+  approve your way past a sanctions hit, a fabricated fund-formation
+  spec-basis, incomplete DD, an LP missing an accredited-investor
+  affirmation, a capital call that would overcall an LP past their
+  commitment, an illegal pipeline-stage transition, a commit attempted
+  before Investment Committee review, before any term sheet was ever
+  proposed, or before the latest term sheet is FULLY EXECUTED (both sides
+  signed), a term sheet proposed after capital is already committed, a
+  portfolio report on a deal that was never actually committed, a
+  follow-on proposed on a deal with no prior commitment, an exit
+  distribution with no commitment record, or a GP-clawback repayment that
+  exceeds the independently-recomputed whole-fund entitlement). The last
+  is SOFT: it asks a human to look (low confidence / actuation), and the
+  human may approve -- but see `vcfund.phase`: for `:capital-call/issue`,
+  `:investment/commit`, `:investment/follow-on`, `:exit/distribute` and
+  `:waterfall/clawback-repay` (real capital movement, in any of the FOUR
   directions) NO phase ever allows auto-commit either. Two independent
-  layers agree that all three directions of actuation are always a human
+  layers agree that all four directions of actuation are always a human
   call. `:deal/advance-stage`, `:term-sheet/propose`, `:term-sheet/sign`
   and `:portfolio/report` are NOT actuation (no capital moves) and so are
   NOT high-stakes -- they may auto-commit when clean, a deliberately
@@ -58,11 +62,12 @@
     8.  Term sheet after commitment -- for `:term-sheet/propose`, is the
                              deal already `:committed`/`:exited`?
                              Negotiation happens pre-commitment only.
-    9.  Accredited investor -- for a capital call or investment commitment,
-                             does every LP in the fund have a recorded
-                             accredited-investor/QP affirmation? (fund-wide:
-                             the whole vehicle's exemption depends on every
-                             investor qualifying, not just the one deal.)
+    9.  Accredited investor -- for a capital call, investment commitment or
+                             follow-on investment, does every LP in the
+                             fund have a recorded accredited-investor/QP
+                             affirmation? (fund-wide: the whole vehicle's
+                             exemption depends on every investor
+                             qualifying, not just the one deal.)
     10. Capital-call overcall -- does the requested call amount, allocated
                              pro-rata by commitment share
                              (`vcfund.registry/capital-call-allocations`),
@@ -74,25 +79,50 @@
                              the deal actually `:committed`/`:exited`? A
                              board-report/KPI record on a deal the fund
                              never invested in is fabricated monitoring.
-    12. Confidence floor / actuation gate -- LLM confidence below threshold,
+    12. Follow-on requires prior commitment -- for `:investment/follow-on`,
+                             is the deal actually `:committed` (an initial
+                             tranche already on file, and not already
+                             `:exited`)? A follow-on deploys ADDITIONAL
+                             capital into a deal the fund already holds --
+                             it is never a substitute for the first
+                             `:investment/commit`.
+    13. Commitment missing -- for `:exit/distribute`, does a commitment
+                             record already exist for the referenced deal?
+                             You cannot distribute exit proceeds for
+                             capital that was never committed.
+    14. Clawback exceeds entitlement -- for `:waterfall/clawback-repay`,
+                             does the requested repayment amount exceed the
+                             INDEPENDENTLY recomputed whole-fund waterfall
+                             entitlement (`vcfund.waterfall/whole-fund-
+                             waterfall-report`)? Never trust the proposal's
+                             self-reported repayment figure.
+    15. Confidence floor / actuation gate -- LLM confidence below threshold,
                              OR the op is `:capital-call/issue`,
-                             `:investment/commit` or `:exit/distribute` ->
-                             escalate."
+                             `:investment/commit`, `:investment/follow-on`,
+                             `:exit/distribute` or `:waterfall/clawback-
+                             repay` -> escalate."
   (:require [vcfund.facts :as facts]
             [vcfund.pipeline :as pipeline]
             [vcfund.registry :as registry]
-            [vcfund.store :as store]))
+            [vcfund.store :as store]
+            [vcfund.waterfall :as waterfall]))
 
 (def confidence-floor 0.6)
 
 (def high-stakes
   "Stakes grave enough to always require a human, even when clean.
-  A VC fund moves real capital in THREE independent directions -- calling
-  committed capital in from LPs, deploying it into a portfolio company, and
-  returning proceeds to LPs -- so, unlike the life-insurance template
-  (exactly one actuation stake), this set has three members on purpose:
-  none is a gradation of the others, all three are absolute."
-  #{:actuation/call :actuation/deploy :actuation/distribute})
+  A VC fund moves real capital in FOUR independent directions -- calling
+  committed capital in from LPs, deploying it (initial OR follow-on) into
+  a portfolio company, returning proceeds to LPs, and a GP repaying
+  clawed-back carry back INTO the fund -- so, unlike the life-insurance
+  template (exactly one actuation stake), this set has four members on
+  purpose: none is a gradation of the others, all four are absolute.
+  `:investment/follow-on` deliberately reuses `:actuation/deploy` (same
+  direction of capital travel as an initial commitment, not a new stake);
+  `:actuation/clawback` is its own stake because it is the one direction
+  where capital flows FROM the GP INTO the fund, the mirror image of every
+  other actuation here."
+  #{:actuation/call :actuation/deploy :actuation/distribute :actuation/clawback})
 
 ;; ----------------------------- checks -----------------------------
 
@@ -213,14 +243,15 @@
           :detail "投資実行(commit)済みの案件へのterm sheet提案は不可"}]))))
 
 (defn- accredited-investor-violations
-  "For a capital call or an investment commitment, EVERY LP in the fund
-  must have a recorded accredited-investor/qualified-purchaser affirmation
-  -- not just the LPs tied to this one deal. The fund's securities
-  exemption (Reg D 506(b)/(c), Investment Company Act §3(c)(1)/§3(c)(7)) is
-  a fund-wide fact: a single unaccredited LP on file taints every
-  subsequent capital call or deployment, not just their own allocation."
+  "For a capital call, an investment commitment or a follow-on investment,
+  EVERY LP in the fund must have a recorded accredited-investor/qualified-
+  purchaser affirmation -- not just the LPs tied to this one deal. The
+  fund's securities exemption (Reg D 506(b)/(c), Investment Company Act
+  §3(c)(1)/§3(c)(7)) is a fund-wide fact: a single unaccredited LP on file
+  taints every subsequent capital call or deployment, not just their own
+  allocation."
   [{:keys [op]} st]
-  (when (contains? #{:capital-call/issue :investment/commit} op)
+  (when (contains? #{:capital-call/issue :investment/commit :investment/follow-on} op)
     (let [unaffirmed (remove :accredited? (store/all-lps st))]
       (when (seq unaffirmed)
         [{:rule :accredited-investor-violation
@@ -249,6 +280,32 @@
       [{:rule :commitment-missing
         :detail "対応するinvestment commitmentレコードが無い状態でのexit分配提案"}])))
 
+(defn- follow-on-requires-prior-commitment-violations
+  "For `:investment/follow-on`, the deal must actually be `:committed` --
+  a follow-on deploys ADDITIONAL capital into a deal the fund ALREADY
+  holds an initial commitment in. It is never a substitute for the first
+  `:investment/commit` (deal still `:sourced`/etc.), and it must never
+  fire again once the deal has fully `:exited`."
+  [{:keys [op subject]} st]
+  (when (= op :investment/follow-on)
+    (let [status (:status (store/deal st subject))]
+      (when-not (= status :committed)
+        [{:rule :follow-on-requires-prior-commitment
+          :detail "既存commitmentが無い、または既にexit済みの案件へのfollow-on投資提案"}]))))
+
+(defn- clawback-exceeds-entitlement-violations
+  "For `:waterfall/clawback-repay`, recompute the whole-fund waterfall
+  reconciliation INDEPENDENTLY from live store data
+  (`vcfund.waterfall/whole-fund-waterfall-report`) -- never trust the
+  proposal's self-reported repayment amount. The requested repayment must
+  not exceed the actually-computed `:gp-clawback` the GP owes the fund."
+  [{:keys [op amount fund-life-years]} st]
+  (when (= op :waterfall/clawback-repay)
+    (let [{:keys [gp-clawback]} (waterfall/whole-fund-waterfall-report st fund-life-years)]
+      (when (> (double amount) (+ gp-clawback 1e-6))
+        [{:rule :clawback-exceeds-entitlement
+          :detail (str "要求返金額" amount "が算定whole-fund clawback額" gp-clawback "を超過")}]))))
+
 (defn check
   "Censors a DD-LLM proposal against the governor rules. Returns
    {:ok? bool :violations [..] :confidence c :escalate? bool :high-stakes? bool
@@ -272,7 +329,9 @@
                            (accredited-investor-violations request st)
                            (overcall-violations request st)
                            (portfolio-report-requires-commitment-violations request st)
-                           (commitment-missing-violations request st)))
+                           (follow-on-requires-prior-commitment-violations request st)
+                           (commitment-missing-violations request st)
+                           (clawback-exceeds-entitlement-violations request st)))
         conf (:confidence proposal 0.0)
         low? (< conf confidence-floor)
         stakes? (boolean (high-stakes (:stake proposal)))

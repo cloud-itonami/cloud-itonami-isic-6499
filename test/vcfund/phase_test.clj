@@ -1,7 +1,8 @@
 (ns vcfund.phase-test
   "The phase table as executable tests. The invariant this repo cannot
-  regress on: none of `:capital-call/issue`, `:investment/commit` or
-  `:exit/distribute` may ever be a member of any phase's `:auto` set."
+  regress on: none of `:capital-call/issue`, `:investment/commit`,
+  `:investment/follow-on`, `:exit/distribute` or `:waterfall/clawback-
+  repay` may ever be a member of any phase's `:auto` set."
   (:require [clojure.test :refer [deftest is testing]]
             [vcfund.phase :as phase]))
 
@@ -23,6 +24,18 @@
       (is (not (contains? auto :exit/distribute))
           (str "phase " n " must not auto-commit :exit/distribute")))))
 
+(deftest investment-follow-on-never-auto-at-any-phase
+  (testing "structural invariant: no phase auto-commits a follow-on capital deployment either"
+    (doseq [[n {:keys [auto]}] phase/phases]
+      (is (not (contains? auto :investment/follow-on))
+          (str "phase " n " must not auto-commit :investment/follow-on")))))
+
+(deftest waterfall-clawback-repay-never-auto-at-any-phase
+  (testing "structural invariant: no phase auto-commits a GP-clawback repayment"
+    (doseq [[n {:keys [auto]}] phase/phases]
+      (is (not (contains? auto :waterfall/clawback-repay))
+          (str "phase " n " must not auto-commit :waterfall/clawback-repay")))))
+
 (deftest phase-0-is-fully-read-only
   (is (empty? (:writes (get phase/phases 0)))))
 
@@ -37,7 +50,9 @@
 (deftest gate-escalates-a-clean-non-auto-write
   (is (= :escalate (:disposition (phase/gate 3 {:op :capital-call/issue} :commit))))
   (is (= :escalate (:disposition (phase/gate 3 {:op :investment/commit} :commit))))
-  (is (= :escalate (:disposition (phase/gate 3 {:op :exit/distribute} :commit)))))
+  (is (= :escalate (:disposition (phase/gate 3 {:op :investment/follow-on} :commit))))
+  (is (= :escalate (:disposition (phase/gate 3 {:op :exit/distribute} :commit))))
+  (is (= :escalate (:disposition (phase/gate 3 {:op :waterfall/clawback-repay} :commit)))))
 
 (deftest gate-holds-a-write-disabled-in-this-phase
   (is (= :hold (:disposition (phase/gate 0 {:op :lp/intake} :commit)))))
