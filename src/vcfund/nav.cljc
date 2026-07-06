@@ -16,13 +16,21 @@
       state and calls the pure functions. Kept separate so the math itself
       has zero I/O dependency.
 
-  Honest limitations (see docstrings): no fund expenses/management-fee
-  accrual netted into cash, no multi-currency FX conversion (assumes one
-  fund base currency), a deal's fair value defaults to its cost basis
-  (the commitment amount) until an operator records a `:fair-value-mark`
-  KPI via `:portfolio/report` -- never silently mark up an unvalued
-  investment."
+  Honest limitations (see docstrings): `management-fee-accrued` is a flat,
+  non-compounded annual rate with no step-down after the investment
+  period (a real LPA's fee schedule often steps down, e.g. 2% -> 1.5%,
+  around year 5 -- not modeled here), no multi-currency FX conversion
+  (assumes one fund base currency), a deal's fair value defaults to its
+  cost basis (the commitment amount) until an operator records a
+  `:fair-value-mark` KPI via `:portfolio/report` -- never silently mark up
+  an unvalued investment."
   (:require [vcfund.store :as store]))
+
+(def default-management-fee-rate
+  "2% annual, on committed capital -- a common (not universal) VC fund
+  management-fee rate. A real LPA's actual rate/basis/step-down schedule
+  always governs; this is a default for demos/tests only."
+  0.02)
 
 (defn unfunded-commitments
   "Per-LP and fund-wide unfunded commitment: commitment - called. The
@@ -44,6 +52,20 @@
      :total-called (reduce + (map :called-amount rows))
      :total-unfunded (reduce + (map :unfunded rows))}))
 
+(defn management-fee-accrued
+  "Cumulative management fee accrued to date -- a flat, non-compounded
+  annual rate on a fee basis (typically total committed capital during a
+  fund's investment period; some LPAs switch the basis to invested-at-cost
+  capital afterward -- this fn does not decide which regime applies, the
+  caller supplies `fee-basis` matching the fund's actual LPA provision).
+  Honestly simplified: no step-down after the investment period (see ns
+  docstring)."
+  [{:keys [fee-basis annual-fee-rate years-elapsed]}]
+  (when (neg? fee-basis) (throw (ex-info "management-fee-accrued: fee-basis must be >= 0" {})))
+  (when (neg? annual-fee-rate) (throw (ex-info "management-fee-accrued: annual-fee-rate must be >= 0" {})))
+  (when (neg? years-elapsed) (throw (ex-info "management-fee-accrued: years-elapsed must be >= 0" {})))
+  (* (double fee-basis) (double annual-fee-rate) (double years-elapsed)))
+
 (defn fund-nav
   "Whole-fund NAV = net cash + fair value of still-held (un-exited)
   investments.
@@ -58,18 +80,22 @@
   waterfall` result).
   `investments` -- coll of `{:deal-id :cost-basis :fair-value (nil ->
   defaults to cost-basis, never inflate an unmarked investment) :exited?}`.
+  `management-fees-accrued` -- OPTIONAL, defaults to 0 (backward
+  compatible); cumulative fees to date (see `management-fee-accrued`),
+  netted out of cash like any other fund expense.
 
-  Returns `{:net-cash :held-fair-value :nav}`. Does NOT net out fund
-  expenses/management fees -- an honest limitation, not silently assumed
-  away; a real fund's cash balance also reflects those."
+  Returns `{:net-cash :held-fair-value :nav}`."
   [{:keys [total-called total-invested-at-cost total-exit-proceeds-received
-           total-distributed-to-lps investments]}]
+           total-distributed-to-lps investments management-fees-accrued]
+    :or {management-fees-accrued 0}}]
   (doseq [[k v] {:total-called total-called :total-invested-at-cost total-invested-at-cost
                 :total-exit-proceeds-received total-exit-proceeds-received
-                :total-distributed-to-lps total-distributed-to-lps}]
+                :total-distributed-to-lps total-distributed-to-lps
+                :management-fees-accrued management-fees-accrued}]
     (when (neg? v) (throw (ex-info (str "fund-nav: " k " must be >= 0") {}))))
   (let [net-cash (- (+ (double total-called) (double total-exit-proceeds-received))
-                    (+ (double total-invested-at-cost) (double total-distributed-to-lps)))
+                    (+ (double total-invested-at-cost) (double total-distributed-to-lps)
+                       (double management-fees-accrued)))
         held (remove :exited? investments)
         held-fair-value (reduce + (map (fn [{:keys [cost-basis fair-value]}]
                                          (double (or fair-value cost-basis)))
@@ -92,8 +118,15 @@
   "Adapter: reads the live `vcfund.store` state and computes whole-fund
   NAV + unfunded commitments. This is the function an operator console
   actually calls; `fund-nav`/`unfunded-commitments` stay pure and
-  independently testable."
-  [st]
+  independently testable.
+
+  `fund-life-years` -- OPTIONAL, defaults to 0 (no fee accrual, backward
+  compatible). Years since the fund's first close -- a REAL external fact
+  the caller supplies, never inferred; management fees accrue on total LP
+  commitments at `annual-fee-rate` (default `default-management-fee-rate`)."
+  ([st] (fund-nav-report st {}))
+  ([st {:keys [fund-life-years annual-fee-rate]
+        :or {fund-life-years 0 annual-fee-rate default-management-fee-rate}}]
   (let [lps (store/all-lps st)
         committed-deals (filter #(contains? #{:committed :exited} (:status %)) (store/all-deals st))
         commitment-recs (store/commitment-history st)
@@ -104,6 +137,10 @@
         total-exit-proceeds-received (reduce + (map #(+ (double (:total-to-lp (get % "waterfall")))
                                                          (double (:total-to-gp (get % "waterfall"))))
                                                      distribution-recs))
+        management-fees-accrued (management-fee-accrued
+                                  {:fee-basis (reduce + (map #(double (:commitment-amount %)) lps))
+                                   :annual-fee-rate annual-fee-rate
+                                   :years-elapsed fund-life-years})
         investments (mapv (fn [d]
                             {:deal-id (:id d)
                              :cost-basis (double (:ask-amount d))
@@ -114,5 +151,7 @@
                       :total-invested-at-cost total-invested-at-cost
                       :total-exit-proceeds-received total-exit-proceeds-received
                       :total-distributed-to-lps total-distributed-to-lps
+                      :management-fees-accrued management-fees-accrued
                       :investments investments})
-           :unfunded (when (seq lps) (unfunded-commitments lps)))))
+           :unfunded (when (seq lps) (unfunded-commitments lps))
+           :management-fees-accrued management-fees-accrued))))

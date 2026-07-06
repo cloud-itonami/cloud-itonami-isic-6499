@@ -320,3 +320,48 @@ offer state machine), vesting/option-strike/multi-SAFE proration, a
 dedicated follow-on-investment op, board-seat/governance-rights
 administration, fund expense/management-fee accrual in NAV, multi-currency
 FX, whole-fund European waterfall, tax/regulatory reporting.
+
+## Addendum 4 (2026-07-06, same day, autonomous /loop iteration): management fees, whole-fund waterfall/GP-clawback
+
+A recurring `/loop` (`coverage, 成熟度を向上` every 30 min) picked the next
+two gaps autonomously, since the owner's last explicit direction ("1, 2,
+3") had already been fully delivered in Addendum 3:
+
+- **`vcfund.nav/management-fee-accrued`** (new, pure) -- a flat,
+  non-compounded annual rate on a caller-supplied fee basis (typically
+  total LP commitments), netted into `fund-nav`'s cash balance via a new
+  OPTIONAL `:management-fees-accrued` key (default 0, fully backward
+  compatible with every existing call site and test). `fund-nav-report`
+  gained an optional second arg, `{:fund-life-years .. :annual-fee-rate
+  ..}` (both real external facts, never inferred; `fund-life-years`
+  defaults to 0 -> 0 fees when omitted), computing the fee basis from
+  live LP commitments. Honestly still a flat rate with no step-down after
+  the investment period (a real LPA's fee often steps down, e.g. 2% ->
+  1.5%, around year 5) -- see the ns docstring.
+- **`vcfund.waterfall`** (new, pure + a store-aware adapter) -- closes the
+  gap flagged in `vcfund.registry/distribute-waterfall`'s own docstring
+  since R0: a real whole-fund EUROPEAN waterfall needs fund-level state
+  spanning every investment. `whole-fund-waterfall` aggregates ALL
+  contributed capital and ALL realized exit proceeds fund-wide, applies
+  ONE preferred return and ONE carry split (same simple, non-compounded
+  discipline as the deal-by-deal calc), and compares the resulting
+  whole-fund GP entitlement against `total-gp-carry-already-paid` (the sum
+  of every deal-by-deal `:total-to-gp`). The shortfall, if any, is a **GP
+  clawback** -- money the GP was already paid (from an early home-run
+  exit's deal-by-deal carry) that the fund's AGGREGATE performance (once
+  later, losing deals are counted) never actually entitled them to. Read-
+  only reconciliation, not a governed op -- like `vcfund.nav`, this moves
+  no capital; an actual clawback repayment would be its own governed act,
+  out of scope here. Verified against a two-deal store-integration
+  scenario (one big win, one loss) producing a real, non-trivial clawback
+  number (not a contrived round figure), matching a hand-computed
+  cross-check.
+
+Consequences: `test/vcfund/*` grew from 81 tests/347 assertions to 92
+tests/373 assertions (new `waterfall_test.clj` plus `nav_test.clj`
+additions), still lint-clean. Remaining honest gaps (tracked in README's
+"Business-process coverage" table): term-sheet redlining/e-signature
+workflow, vesting/option-strike/multi-SAFE proration, a dedicated
+follow-on-investment op, board-seat/governance-rights administration,
+management-fee step-downs, multi-currency FX, an actual GP-clawback
+repayment op, tax/regulatory reporting.

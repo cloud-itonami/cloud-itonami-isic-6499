@@ -155,46 +155,49 @@ the same "self-contained sibling" relationship `cloud-itonami-isic-6511`'s
 | `src/vcfund/registry.cljc` | Capital-call pro-rata allocation + investment-commitment draft records + exit-distribution waterfall calc (deal-by-deal, documented limitation) + portfolio-report + versioned term-sheet drafts |
 | `src/vcfund/pipeline.cljc` | Pure deal-pipeline funnel model (sourcing → screening → pitched → term-sheet → dd → ic-review), forward-only transitions, `:committed`/`:exited` reachable only via the real capital ops |
 | `src/vcfund/captable.cljc` | Pure SAFE-conversion, priced-round ownership/dilution (percentage AND absolute share-count terms) and option-pool-shuffle calculator (see docstring for what it deliberately does NOT model) |
-| `src/vcfund/nav.cljc` | Pure whole-fund NAV + unfunded-commitment calculator, plus a store-aware `fund-nav-report` adapter |
+| `src/vcfund/nav.cljc` | Pure whole-fund NAV + unfunded-commitment + management-fee-accrual calculator, plus a store-aware `fund-nav-report` adapter |
+| `src/vcfund/waterfall.cljc` | Pure whole-fund (European-style) waterfall reconciliation + GP-clawback calculator, plus a store-aware `whole-fund-waterfall-report` adapter |
 | `src/vcfund/facts.cljc` | Per-jurisdiction fund-formation/exemption-regime catalog with an official spec-basis citation per entry, honest coverage reporting |
 | `src/vcfund/ddllm.cljc` | **DD-LLM Advisor** -- `mock-advisor` ‖ `llm-advisor`; LP-intake/DD/KYC/stage-advance/term-sheet/capital-call/commitment/portfolio-report/distribution proposals |
 | `src/vcfund/governor.cljc` | **InvestmentCommitteeGovernor** -- 11 checks: spec-basis · sanctions hold · DD-complete · stage-insufficient · stage-transition · term-sheet-missing · term-sheet-after-commitment · accredited-investor · capital-call overcall · portfolio-report-requires-commitment · confidence/triple-actuation gate |
 | `src/vcfund/phase.cljc` | **Phase 0→3** -- read-only → assisted intake → assisted DD/screen → supervised (call/commit/distribute always human; stage-advance/term-sheet-propose/portfolio-report auto-eligible, no capital risk) |
 | `src/vcfund/operation.cljc` | **OperationActor** -- langgraph-clj StateGraph |
 | `src/vcfund/sim.cljc` | demo driver |
-| `test/vcfund/*_test.clj` | governor contract · phase invariants · store parity · registry conformance · pipeline/captable/nav unit tests · facts coverage |
+| `test/vcfund/*_test.clj` | governor contract · phase invariants · store parity · registry conformance · pipeline/captable/nav/waterfall unit tests · facts coverage |
 
 ## Business-process coverage (honest)
 
 This actor covers **eight governed decision gates** in a VC fund's
-lifecycle, a pipeline/cap-table/NAV calculator layer, plus the audit
-ledger. It does **not** cover the surrounding day-to-day fund operations.
-Stated plainly so nobody mistakes gate coverage for full
+lifecycle, a pipeline/cap-table/NAV/whole-fund-waterfall calculator layer,
+plus the audit ledger. It does **not** cover the surrounding day-to-day
+fund operations. Stated plainly so nobody mistakes gate coverage for full
 fund-administration coverage:
 
 | Covered | Not covered (out of scope for this R0) |
 |---|---|
 | Deal pipeline: sourcing → screening → pitched → term-sheet → dd → ic-review, forward-only, illegal transitions HARD-blocked (`vcfund.pipeline`) | Fund formation, LPA drafting, fund closes, side letters |
 | LP subscription intake + fund-wide accredited-investor gate | Term-sheet *redlining*/e-signature workflow (versions are recorded; there's no diff/markup UI or counter-offer state machine beyond "append the next version") |
-| Versioned term-sheet negotiation rounds (`:term-sheet/propose`, blocked once the deal is already committed; `:investment/commit` requires at least one round on file) | Whole-fund European waterfall with cross-deal netting and GP clawback (explicitly out of scope, see `docs/adr/0001-architecture.md`) |
+| Versioned term-sheet negotiation rounds (`:term-sheet/propose`, blocked once the deal is already committed; `:investment/commit` requires at least one round on file) | A real clawback REPAYMENT act -- `vcfund.waterfall` computes what the GP owes back; actually moving that money is not a governed op here |
 | Capital calls, pro-rata by commitment share, overcall-blocked | Vesting schedules, option strike-price/exercise modeling, multi-SAFE simultaneous-conversion proration (`vcfund.captable`, see its docstring) |
 | Deal DD checklist vs. named jurisdiction spec-basis, AND a HARD gate that `:investment/commit` requires the deal to have actually reached `:ic-review` in the pipeline | Follow-on investment decisions (modeled today as: source a new deal record for the follow-on round, run it through the same DD→commit lifecycle -- no dedicated "follow-on" op) |
 | AML/sanctions screening (LPs, founders) | Board seats / governance rights administration |
-| Investment-Committee capital deployment | Fund expense/management-fee accrual netted into `vcfund.nav`'s cash balance (see its docstring) |
-| Portfolio-company KPI/board reporting for committed deals (`:portfolio/report`, HARD-gated on the deal actually being committed) | Multi-currency FX conversion (`vcfund.nav` assumes one fund base currency) |
+| Investment-Committee capital deployment | Management-fee schedule step-downs after the investment period (`vcfund.nav/management-fee-accrued` is a flat rate, see its docstring) |
+| Portfolio-company KPI/board reporting for committed deals (`:portfolio/report`, HARD-gated on the deal actually being committed) | Multi-currency FX conversion (`vcfund.nav`/`vcfund.waterfall` assume one fund base currency) |
 | SAFE-conversion, priced-round ownership/dilution (percentage AND absolute share-count terms) and option-pool-shuffle math (`vcfund.captable`) | Tax reporting (K-1s etc.), regulatory filings (Form D/ADV), real fund-accounting-system integration |
-| Whole-fund NAV and unfunded-commitment reporting (`vcfund.nav`, fair value defaults to cost basis until a `:fair-value-mark` KPI is recorded) | |
-| Exit-proceeds waterfall (deal-by-deal: return of capital → preferred return → GP carry) | |
+| Whole-fund NAV, unfunded-commitment and management-fee-accrual reporting (`vcfund.nav`, fair value defaults to cost basis until a `:fair-value-mark` KPI is recorded) | |
+| Whole-fund (European-style) waterfall reconciliation + GP-clawback calculation against deal-by-deal carry already paid (`vcfund.waterfall`) | |
+| Exit-proceeds waterfall (deal-by-deal: return of capital → preferred return → GP carry -- what actually pays out; `vcfund.waterfall` reconciles against it, doesn't replace it) | |
 | Immutable audit ledger for every call/commit/report/distribute/term-sheet decision | |
 
 Extending coverage is additive, the same discipline as jurisdiction
 coverage: add the next gate as its own governed op (or calculator module,
-when the concern is advisory rather than a capital-movement decision) with
-its own HARD checks and tests, never silently expand scope without a
-corresponding governor rule and test. History so far: capital calls, then
-pipeline/portfolio-monitoring/cap-table math, then whole-fund NAV/absolute
-share counts/term-sheet negotiation, were the additions beyond the initial
-four-gate R0.
+when the concern is advisory/reconciliation rather than a capital-movement
+decision) with its own HARD checks and tests, never silently expand scope
+without a corresponding governor rule and test. History so far: capital
+calls, then pipeline/portfolio-monitoring/cap-table math, then whole-fund
+NAV/absolute share counts/term-sheet negotiation, then management-fee
+accrual and whole-fund-waterfall/GP-clawback reconciliation, were the
+additions beyond the initial four-gate R0.
 
 ## Jurisdiction coverage (honest)
 

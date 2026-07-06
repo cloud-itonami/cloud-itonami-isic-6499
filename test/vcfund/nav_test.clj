@@ -50,6 +50,31 @@
                                         :total-exit-proceeds-received 0 :total-distributed-to-lps 0
                                         :investments []}))))
 
+;; ----------------------------- management fees -----------------------------
+
+(deftest management-fee-accrued-is-a-flat-annual-rate-on-the-basis
+  (is (close? 240000.0 (nav/management-fee-accrued
+                        {:fee-basis 6000000 :annual-fee-rate 0.02 :years-elapsed 2}))))
+
+(deftest management-fee-accrued-validation-rules
+  (is (thrown? Exception (nav/management-fee-accrued {:fee-basis -1 :annual-fee-rate 0.02 :years-elapsed 1})))
+  (is (thrown? Exception (nav/management-fee-accrued {:fee-basis 1 :annual-fee-rate -0.02 :years-elapsed 1})))
+  (is (thrown? Exception (nav/management-fee-accrued {:fee-basis 1 :annual-fee-rate 0.02 :years-elapsed -1}))))
+
+(deftest fund-nav-defaults-management-fees-to-zero-backward-compatibly
+  (let [r (nav/fund-nav {:total-called 2000000 :total-invested-at-cost 2000000
+                         :total-exit-proceeds-received 0 :total-distributed-to-lps 0
+                         :investments [{:deal-id "deal-1" :cost-basis 2000000 :fair-value nil :exited? false}]})]
+    (is (close? 2000000.0 (:nav r)) "no management-fees-accrued key supplied -> treated as 0")))
+
+(deftest fund-nav-nets-management-fees-out-of-cash
+  (let [r (nav/fund-nav {:total-called 2000000 :total-invested-at-cost 2000000
+                         :total-exit-proceeds-received 0 :total-distributed-to-lps 0
+                         :management-fees-accrued 240000
+                         :investments [{:deal-id "deal-1" :cost-basis 2000000 :fair-value nil :exited? false}]})]
+    (is (close? -240000.0 (:net-cash r)))
+    (is (close? 1760000.0 (:nav r)))))
+
 ;; ----------------------------- store integration -----------------------------
 
 (deftest fund-nav-report-tracks-a-full-lifecycle
@@ -71,3 +96,20 @@
       (let [r (nav/fund-nav-report db)]
         (is (close? 0.0 (:held-fair-value r)))
         (is (close? 1904000.0 (:nav r)))))))
+
+(deftest fund-nav-report-defaults-to-zero-fees-when-fund-life-years-omitted
+  (let [db (store/seed-db)]
+    (store/commit-record! db {:effect :capital-call/mark-issued :path ["deal-1"]
+                              :payload {:jurisdiction "USA" :call-amount 2000000 :notice-date "2026-07-06"}})
+    (store/commit-record! db {:effect :investment/mark-committed :path ["deal-1"]})
+    (is (close? 2000000.0 (:nav (nav/fund-nav-report db))) "no options map -> 0 years elapsed -> 0 fees")))
+
+(deftest fund-nav-report-nets-management-fees-given-fund-life-years
+  (let [db (store/seed-db)]
+    (store/commit-record! db {:effect :capital-call/mark-issued :path ["deal-1"]
+                              :payload {:jurisdiction "USA" :call-amount 2000000 :notice-date "2026-07-06"}})
+    (store/commit-record! db {:effect :investment/mark-committed :path ["deal-1"]})
+    ;; total LP commitments = 5M + 1M = 6M; 2 years @ default 2% annual -> 240,000 fee
+    (let [r (nav/fund-nav-report db {:fund-life-years 2})]
+      (is (close? 240000.0 (:management-fees-accrued r)))
+      (is (close? 1760000.0 (:nav r))))))
