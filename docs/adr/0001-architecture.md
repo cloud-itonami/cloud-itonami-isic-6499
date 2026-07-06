@@ -745,3 +745,82 @@ cap/discount post-money multi-SAFE rounds, actual AMT LIABILITY
 computation and 83(b) elections, `total-invested-at-cost`/distribution-
 waterfall currency conversion, tax/regulatory reporting (K-1s, Form
 D/ADV).
+
+## Addendum 10 (2026-07-06, same day, autonomous /loop iteration): PER-LP capital-account statements
+
+No new explicit owner direction again -- the recurring `/loop` prompt
+asked for coverage/maturity improvement. This time, rather than continue
+narrowing Addendum 9's already-thin remaining-gaps list (which is now
+mostly genuine third-party-integration boundaries -- e-signature
+provider, real tax/regulatory content -- or a previously-reasoned-against
+large refactor -- `total-invested-at-cost`/distribution currency, which
+would need a breaking signature change to `vcfund.registry/register-
+commitment` cascading across every existing call site), this iteration
+identified a genuinely NEW, previously-untracked gap: this actor has
+never produced a PER-LP report. Every reporting surface built across
+Addenda 1-9 (`fund-nav-report`, `whole-fund-waterfall-report`) is a
+WHOLE-FUND view; a real fund's LPs expect their OWN quarterly capital-
+account statement (their commitment, called-to-date, distributed-to-date
+and current NAV share) -- a standard VC/PE fund-administration
+deliverable that was simply absent from both the code and every prior
+addendum's coverage table (`grep`-verified: "capital account" appeared
+exactly once, in `docs/business-model.md`'s Offer list, referring to LP
+INTAKE, never to an actual per-LP STATEMENT).
+
+- **`vcfund.nav/lp-capital-account`** (new, pure) -- one LP's slice: an
+  `unfunded-commitments`-style `{:lp-id :commitment-amount :called-amount
+  :unfunded}` row (already FX-converted if the caller asked for that)
+  PLUS `:ownership-pct` (commitment-amount / fund-wide total-commitments
+  -- the SAME denominator every capital call already pro-rates against,
+  via `vcfund.registry/capital-call-allocations`, so an LP's ownership
+  share here is guaranteed internally consistent with how much of every
+  actual call/distribution they bear), `:distributed-to-date`
+  (ownership-pct * the fund's aggregate distributions) and `:nav-share`
+  (ownership-pct * whole-fund NAV). Pro-rata by COMMITMENT SHARE (the
+  standard LPA convention), not called-to-date share.
+- **`vcfund.nav/lp-capital-account-report`** (new, store-aware adapter)
+  -- calls `fund-nav-report` INTERNALLY (never re-derives the whole-fund
+  totals independently) and maps `lp-capital-account` over every LP in
+  `(:unfunded nav-report)`'s already-FX-converted `:by-lp` rows. This
+  guarantees an LP's own statement and the whole-fund NAV report always
+  reconcile against the exact same numbers -- verified by a dedicated
+  test asserting `sum(nav-share)` = whole-fund `:nav` and
+  `sum(distributed-to-date)` = `:total-distributed-to-lps` exactly.
+  Inherits `fund-nav-report`'s fee/step-down/FX options unchanged (passed
+  straight through), so a multi-currency fund's per-LP statements convert
+  into the same base currency the whole-fund view uses.
+- `fund-nav-report`'s returned map grew ONE new key,
+  `:total-distributed-to-lps` (a value it was already computing
+  internally for `fund-nav`'s own `total-distributed-to-lps` input, just
+  never exposed) -- purely additive, does not change any existing key's
+  meaning or any existing caller's behavior.
+- Honestly bounded, and now explicitly documented (both in the ns
+  docstring and README's coverage table): `lp-capital-account`'s
+  ownership-pct is a STATIC commitment-share split for the life of the
+  fund -- an LP selling their fund interest to another investor mid-fund
+  (a secondary transfer) is not modeled at all. This is a genuinely NEW
+  limitation surfaced by building the feature, not a pre-existing one
+  this addendum happened to notice -- the honest-limitations discipline
+  applies to gaps this same addendum's own new code opens up, not only
+  to gaps inherited from earlier work.
+- Neither new fn touches `vcfund.governor`/`vcfund.phase`/
+  `vcfund.store`/`vcfund.operation` -- both are pure read-only reporting,
+  the same posture every other `vcfund.nav` fn takes; zero new governed
+  decision gates this iteration, the "twelve governed decision gates"
+  count is unchanged from Addendum 9.
+
+Consequences: `test/vcfund/*` grew from 158 tests/614 assertions to 164
+tests/629 assertions (new tests in `nav_test.clj`: `fund-nav-report`
+exposing `:total-distributed-to-lps`, `lp-capital-account`'s pure math
+and validation rules, `lp-capital-account-report` reconciling exactly
+against `fund-nav-report`'s totals, FX-awareness, and the empty-store
+edge case), still lint-clean; demo (`clojure -M:dev:run`) unaffected --
+consistent with every prior `vcfund.nav`/`vcfund.captable` addition,
+neither of the two new fns is a governed op, so `sim.cljc` needed no
+changes. Remaining honest gaps (tracked in README's "Business-process
+coverage" table): a real e-signature PROVIDER integration and redlining
+UI, mixed pre-money/post-money or mixed cap/discount post-money
+multi-SAFE rounds, actual AMT LIABILITY computation and 83(b) elections,
+`total-invested-at-cost`/distribution-waterfall currency conversion,
+secondary transfers of an LP's fund interest, tax/regulatory reporting
+(K-1s, Form D/ADV).

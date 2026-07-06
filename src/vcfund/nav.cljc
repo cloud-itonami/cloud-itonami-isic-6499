@@ -1,8 +1,9 @@
 (ns vcfund.nav
-  "Whole-fund NAV (net asset value) and unfunded-commitment reporting --
-  closes the first of the three remaining honest coverage gaps (whole-fund
-  NAV, term-sheet negotiation workflow, absolute cap-table/option-pool
-  modeling) tracked in README's \"Business-process coverage\" table.
+  "Whole-fund NAV (net asset value), unfunded-commitment and PER-LP
+  capital-account reporting -- closes the first of the three remaining
+  honest coverage gaps (whole-fund NAV, term-sheet negotiation workflow,
+  absolute cap-table/option-pool modeling) tracked in README's
+  \"Business-process coverage\" table.
 
   Read-only reporting, not a governed op: computing NAV moves no capital
   and makes no investment decision, so it does not need
@@ -10,11 +11,15 @@
   posture `vcfund.captable` takes on valuation math.
 
   Two layers:
-    - `unfunded-commitments`/`fund-nav` -- pure functions over plain data,
-      independently testable.
-    - `fund-nav-report` -- a thin adapter that reads the live `vcfund.store`
-      state and calls the pure functions. Kept separate so the math itself
-      has zero I/O dependency.
+    - `unfunded-commitments`/`fund-nav`/`lp-capital-account` -- pure
+      functions over plain data, independently testable.
+    - `fund-nav-report`/`lp-capital-account-report` -- thin adapters that
+      read the live `vcfund.store` state and call the pure functions.
+      Kept separate so the math itself has zero I/O dependency.
+      `lp-capital-account-report` calls `fund-nav-report` internally
+      rather than re-deriving the whole-fund totals independently, so an
+      LP's own capital-account statement and the whole-fund NAV report
+      always reconcile against the exact same numbers.
 
   Honest limitations (see docstrings): `management-fee-accrued` is a flat,
   non-compounded annual rate, OPTIONALLY with a single step-down after an
@@ -33,7 +38,12 @@
   unmodeled gap; a deal's fair value defaults to its cost basis (the
   commitment amount) until an operator records a `:fair-value-mark` KPI
   via `:portfolio/report` -- never silently mark up an unvalued
-  investment."
+  investment. `lp-capital-account` pro-rates by COMMITMENT SHARE, a
+  static split for the life of the fund -- an LP selling their interest
+  to another investor mid-fund (a secondary transfer) is not modeled at
+  all; every LP's ownership share here is exactly what it was when they
+  originally committed."
+
   (:require [vcfund.store :as store]))
 
 (def default-management-fee-rate
@@ -243,4 +253,67 @@
                       :investments investments})
            :unfunded (when (seq lps)
                        (unfunded-commitments lps {:base-currency base-currency :fx-rates fx-rates}))
-           :management-fees-accrued management-fees-accrued))))
+           :management-fees-accrued management-fees-accrued
+           :total-distributed-to-lps total-distributed-to-lps))))
+
+(defn lp-capital-account
+  "One LP's capital-account slice -- their own commitment, called-to-date
+  and unfunded remainder (`lp-row`, an `unfunded-commitments`-style
+  `{:lp-id :commitment-amount :called-amount :unfunded}` -- already
+  FX-converted if the caller asked for that), PLUS their pro-rata share
+  of the fund's aggregate distributions-to-date and current whole-fund
+  NAV.
+
+  `total-commitments` -- fund-wide sum of every LP's (possibly
+  FX-converted) commitment-amount, the SAME denominator
+  `unfunded-commitments` already computed for `lp-row` -- this fn does
+  NOT recompute it, so `:ownership-pct` here is guaranteed consistent
+  with the share every actual capital call already pro-rates against
+  (`vcfund.registry/capital-call-allocations`).
+  `total-distributed-to-lps`/`fund-nav` -- the fund's whole-fund totals
+  (`fund-nav-report`'s own return) -- not independently recomputed here
+  either, so an LP's capital-account statement always reconciles against
+  the SAME numbers the whole-fund NAV report shows, never a second,
+  divergent calculation.
+
+  Pro-rata by COMMITMENT SHARE (the standard LPA convention), NOT
+  called-to-date share -- an LP who has called less capital than another
+  still owns the SAME fractional slice of distributions/NAV their
+  commitment entitles them to. Honestly limited: does not model an
+  ownership % that changed mid-fund via a secondary transfer of an LP's
+  interest (secondary transfers are not modeled at all -- see ns
+  docstring), and NAV/distribution totals it shares out inherit whatever
+  FX/currency limitations `fund-nav-report` itself has.
+
+  Returns `lp-row` plus `:ownership-pct :distributed-to-date
+  :nav-share`."
+  [lp-row {:keys [total-commitments total-distributed-to-lps fund-nav]}]
+  (when-not (pos? total-commitments)
+    (throw (ex-info "lp-capital-account: total-commitments must be > 0" {})))
+  (when (neg? total-distributed-to-lps)
+    (throw (ex-info "lp-capital-account: total-distributed-to-lps must be >= 0" {})))
+  (let [ownership-pct (/ (double (:commitment-amount lp-row)) (double total-commitments))]
+    (assoc lp-row
+           :ownership-pct ownership-pct
+           :distributed-to-date (* ownership-pct (double total-distributed-to-lps))
+           :nav-share (* ownership-pct (double fund-nav)))))
+
+(defn lp-capital-account-report
+  "Adapter: every LP's capital-account statement (`lp-capital-account`),
+  computed off the SAME `fund-nav-report` an operator console already
+  calls for the whole-fund view -- never a second, independently-derived
+  set of totals (so the two reports always reconcile). Same `opts`
+  `fund-nav-report` accepts (fee/step-down/FX options); passed straight
+  through, so a multi-currency fund's per-LP statements are FX-converted
+  into the same `:base-currency` the whole-fund view uses.
+
+  Returns a vector of `lp-capital-account` results, one per LP, empty if
+  the fund has no LPs."
+  ([st] (lp-capital-account-report st {}))
+  ([st opts]
+   (let [nav-report (fund-nav-report st opts)
+         by-lp (:by-lp (:unfunded nav-report))
+         totals {:total-commitments (:total-commitments (:unfunded nav-report))
+                 :total-distributed-to-lps (:total-distributed-to-lps nav-report)
+                 :fund-nav (:nav nav-report)}]
+     (mapv #(lp-capital-account % totals) by-lp))))

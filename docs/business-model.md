@@ -61,6 +61,9 @@
   for LPs AND held deals denominated in different currencies) and
   management-fee reporting (optional step-down after the investment
   period)
+- per-LP capital-account statements (commitment, called-to-date,
+  unfunded, pro-rata distributed-to-date and NAV share), reconciled
+  against the same whole-fund NAV report
 - exit-proceeds waterfall distribution proposal
 - immutable audit ledger
 

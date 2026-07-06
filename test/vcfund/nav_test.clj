@@ -205,3 +205,59 @@
       (testing "marked -- fair-value-mark converts (in the deal's own currency)"
         (let [r (nav/fund-nav-report db {:base-currency "USD" :fx-rates {"JPY" 0.01}})]
           (is (close? 30000.0 (:held-fair-value r)) "3,000,000 JPY mark @ 0.01 -> 30,000 USD"))))))
+
+;; ----------------------------- LP capital-account statements -----------------------------
+
+(deftest fund-nav-report-exposes-total-distributed-to-lps
+  (let [db (store/seed-db)]
+    (store/commit-record! db {:effect :capital-call/mark-issued :path ["deal-1"]
+                              :payload {:jurisdiction "USA" :call-amount 2000000 :notice-date "2026-07-06"}})
+    (store/commit-record! db {:effect :investment/mark-committed :path ["deal-1"]})
+    (store/commit-record! db {:effect :distribution/mark-paid :path ["deal-1"]
+                              :payload {:exit-proceeds 12000000 :holding-period-years 3}})
+    (is (close? 10096000.0 (:total-distributed-to-lps (nav/fund-nav-report db))))))
+
+(def lp-row-fixture
+  {:lp-id "lp-1" :commitment-amount 5000000 :called-amount 1000000 :unfunded 4000000})
+
+(deftest lp-capital-account-computes-ownership-pct-and-shares
+  (let [r (nav/lp-capital-account lp-row-fixture
+                                  {:total-commitments 6000000 :total-distributed-to-lps 3000000 :fund-nav 12000000})]
+    (is (close? (/ 5.0 6) (:ownership-pct r)))
+    (is (close? 2500000.0 (:distributed-to-date r)) "5/6 * 3,000,000")
+    (is (close? 10000000.0 (:nav-share r)) "5/6 * 12,000,000")
+    (is (= "lp-1" (:lp-id r)))
+    (is (close? 5000000.0 (:commitment-amount r)) "original row fields are preserved")))
+
+(deftest lp-capital-account-validation-rules
+  (is (thrown? Exception (nav/lp-capital-account lp-row-fixture
+                                                 {:total-commitments 0 :total-distributed-to-lps 0 :fund-nav 0})))
+  (is (thrown? Exception (nav/lp-capital-account lp-row-fixture
+                                                 {:total-commitments 6000000 :total-distributed-to-lps -1 :fund-nav 0}))))
+
+(deftest lp-capital-account-report-reconciles-against-fund-nav-report
+  (let [db (store/seed-db)]
+    (store/commit-record! db {:effect :capital-call/mark-issued :path ["deal-1"]
+                              :payload {:jurisdiction "USA" :call-amount 2000000 :notice-date "2026-07-06"}})
+    (store/commit-record! db {:effect :investment/mark-committed :path ["deal-1"]})
+    (store/commit-record! db {:effect :distribution/mark-paid :path ["deal-1"]
+                              :payload {:exit-proceeds 12000000 :holding-period-years 3}})
+    (let [nav-report (nav/fund-nav-report db)
+          accounts (nav/lp-capital-account-report db)
+          by-id (into {} (map (juxt :lp-id identity)) accounts)]
+      (is (= 2 (count accounts)))
+      (is (close? (/ 5.0 6) (:ownership-pct (get by-id "lp-1"))) "lp-1 committed 5M of the fund's 6M total")
+      (is (close? (/ 1.0 6) (:ownership-pct (get by-id "lp-2"))))
+      (is (close? (:nav nav-report) (reduce + (map :nav-share accounts)))
+          "every LP's nav-share sums back to the whole-fund NAV")
+      (is (close? (:total-distributed-to-lps nav-report) (reduce + (map :distributed-to-date accounts)))
+          "every LP's distributed-to-date sums back to the fund's aggregate distributions"))))
+
+(deftest lp-capital-account-report-is-fx-aware-when-options-supplied
+  (let [db (store/seed-db)
+        accounts (nav/lp-capital-account-report db {:base-currency "USD" :fx-rates {"JPY" 0.01}})
+        by-id (into {} (map (juxt :lp-id identity)) accounts)]
+    (is (close? 10000.0 (:commitment-amount (get by-id "lp-2"))) "1,000,000 JPY @ 0.01 -> 10,000 USD")))
+
+(deftest lp-capital-account-report-empty-store-is-an-empty-list
+  (is (= [] (nav/lp-capital-account-report (store/datomic-store)))))
