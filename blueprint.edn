@@ -1,11 +1,13 @@
 {:itonami.blueprint/id "cloud-itonami-isic-6499"
- :itonami.blueprint/name "Other financial service activities, except insurance and pension funding, n.e.c."
+ :itonami.blueprint/name "Other financial service activities, except insurance and pension funding, n.e.c. (venture capital fund)"
  :itonami.blueprint/isic-rev5 "6499"
- :itonami.blueprint/domain :finance/other-financial-services
+ :itonami.blueprint/isic-citation "ISIC Rev.4 6499 explanatory note: \"own-account investment activities, such as by venture capital companies, investment clubs etc.\" (https://unstats.un.org/unsd/classifications/Econ/Detail/EN/27/6499)"
+ :itonami.blueprint/domain :finance/venture-capital-fund
  :itonami.blueprint/license "AGPL-3.0-or-later"
  :itonami.blueprint/social-impact [:financial-inclusion :data-sovereignty :transparency]
- :itonami.blueprint/governor :financial-services-governor
- :itonami.blueprint/required-technologies [:robotics :identity :forms :dmn :bpmn :audit-ledger :banking]
+ :itonami.blueprint/governor :investment-committee-governor
+ :itonami.blueprint/required-technologies [:robotics :identity :forms :dmn :bpmn :audit-ledger :securities]
  :itonami.blueprint/optional-technologies []
  :itonami.blueprint/status :public-oss
- :itonami.blueprint/robotics true}
+ :itonami.blueprint/robotics true
+ :itonami.blueprint/maturity :implemented}

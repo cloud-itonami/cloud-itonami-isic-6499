@@ -2,22 +2,25 @@
 
 ## First Deployment
 
-1. Register the operator's license, jurisdiction and responsible principals.
-2. Import historical accounts/positions and counterparties.
+1. Register the operator's (fund manager's) license/exemption status,
+   jurisdiction and responsible principals.
+2. Import historical LP subscriptions, portfolio-company investments and
+   counterparties.
 3. Run read-only validation of existing records against this blueprint's
    contracts.
-4. Configure the Financial Services Governor's hold/escalation policy.
+4. Configure the InvestmentCommitteeGovernor's hold/escalation policy.
 5. Publish a dry-run operation and audit export.
 
 ## Minimum Production Controls
 
-- spec-basis citation required before any customer-facing determination
-- executing a real financial transaction (fund transfer/disbursement) always requires a human sign-off
+- spec-basis citation required before any DD determination
+- committing fund capital, or distributing exit proceeds, always requires
+  Investment Committee (human) sign-off
 - audit export for every hold, approval and disbursement
 - backup manual process for governor/system outage
 
 ## Certification
 
-Certified operators must prove case/account-record integrity, governor
+Certified operators must prove LP/portfolio-record integrity, governor
 independence, evidence-backed reporting and human review for every
-high-stakes action.
+high-stakes action (capital commitment, exit distribution).

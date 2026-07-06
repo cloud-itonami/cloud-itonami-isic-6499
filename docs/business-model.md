@@ -1,35 +1,55 @@
-# Business Model: Other financial service activities, except insurance and pension funding, n.e.c.
+# Business Model: Venture capital fund (ISIC 6499)
 
 ## Classification
 
 - Repository: `cloud-itonami-isic-6499`
-- ISIC Rev.5: `6499`
-- Activity: other financial service activities not elsewhere classified, except insurance and pension funding (e.g. factoring, check-cashing, money-order issuance)
-- Social impact: financial inclusion, data sovereignty, transparent audit
+- ISIC Rev.4/5: `6499` -- Other financial service activities, except
+  insurance and pension funding, n.e.c. The UN ISIC Rev.4 explanatory note
+  for this class names *"own-account investment activities, such as by
+  venture capital companies, investment clubs etc."* explicitly
+  (https://unstats.un.org/unsd/classifications/Econ/Detail/EN/27/6499) --
+  this repository implements that member of the class.
+- Activity: raising committed capital from limited partners, sourcing and
+  diligencing deals, deploying capital into portfolio companies, and
+  distributing exit proceeds back to LPs.
+- Social impact: financial inclusion (open-source fund-ops tooling lowers
+  the cost of running an emerging-manager fund), data sovereignty,
+  transparent audit.
 
 ## Customer
 
-- independent financial-service operators
-- community remittance/money-order programs
+- emerging-manager / first-time GPs who want to self-host fund operations
+  instead of buying a closed fund-admin SaaS
+- angel syndicates transitioning to a committed-capital fund structure
+- accelerator-affiliated seed funds
+- independent fund administrators serving multiple small GPs
 
 ## Offer
 
-- customer intake
-- transaction-disclosure proposal
-- transaction-execution proposal
+- LP subscription intake (commitment amount, capital account, accredited-
+  investor/QP affirmation)
+- deal due-diligence checklist proposal against a named framework's
+  spec-basis
+- AML/sanctions screening for LPs and portfolio-company parties
+- Investment Committee capital-deployment proposal
+- exit-proceeds waterfall distribution proposal
 - immutable audit ledger
 
 ## Revenue
 
 - self-host setup: one-time implementation fee
-- managed hosting: monthly subscription per transaction volume
+- managed hosting: monthly subscription per fund vehicle
 - support: monthly retainer with SLA
-- migration: import from an incumbent system
-- per-transaction fee
+- migration: import from an incumbent fund-admin system or spreadsheets
+- capital-call / distribution processing fee
 
 ## Trust Controls
 
-- no transaction is executed without human sign-off
-- a fabricated disclosure forces a hold, not an override
-- every transaction path is auditable
+- no capital is committed to a portfolio company and no exit distribution
+  is paid without Investment Committee (human) sign-off
+- a fabricated DD checklist, a sanctions hit, or a missing accredited-
+  investor affirmation forces a hold, not an override
+- LP personal/financial data and portfolio-company confidential data stay
+  outside Git
+- every commitment/distribution path is auditable
 - emergency manual override paths remain outside LLM control

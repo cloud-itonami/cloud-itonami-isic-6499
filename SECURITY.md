@@ -1,16 +1,17 @@
 # Security Policy
 
-This project handles Other financial service activities, except insurance and pension funding, n.e.c. workflows. Treat vulnerabilities as
-potentially high impact even when the demo data is synthetic.
+This project handles venture capital fund workflows -- LP subscriptions,
+portfolio-company due diligence, and capital movement. Treat vulnerabilities
+as potentially high impact even when the demo data is synthetic.
 
 ## Do Not Disclose Publicly
 
 Report privately before opening public issues for:
 
 - credential exposure
-- real customer or account-record data exposure
+- real LP or portfolio-company data exposure
 - authorization bypass
-- Financial Services Governor bypass
+- InvestmentCommitteeGovernor bypass
 - audit-ledger tampering
 - over-disclosure in reports or exports
 
@@ -25,13 +26,13 @@ Include:
 - affected commit or version
 - reproduction steps
 - expected and actual behavior
-- impact on customer data, policy enforcement or audit logging
+- impact on LP data, investment-decision enforcement or audit logging
 - suggested fix, if known
 
 ## Production Guidance
 
 - Store secrets outside Git.
-- Keep real customer/account data outside this repository.
+- Keep real LP/portfolio-company data outside this repository.
 - Run policy tests before deployment.
 - Export and review audit logs regularly.
 - Use least privilege for operators and service accounts.

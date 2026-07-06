@@ -1,18 +1,25 @@
 # Governance
 
-`cloud-itonami-isic-6499` is an OSS open-business blueprint for other financial service activities not elsewhere classified, except insurance and pension funding (e.g. factoring, check-cashing, money-order issuance).
-Governance covers both the capability layer and the operator model.
+`cloud-itonami-isic-6499` is an OSS open-business blueprint for a venture
+capital fund (ISIC 6499's own-account-investment member) -- LP subscription
+intake, deal due diligence, Investment Committee capital deployment, and
+exit/distribution to LPs. Governance covers both the capability layer and
+the operator model.
 
 ## Maintainers
 
 Maintainers may merge changes that preserve these invariants:
 
-- the Financial Services Governor remains independent of the advisor.
+- the InvestmentCommitteeGovernor remains independent of the advisor.
 - hard policy violations (fabricated spec-basis, sanctions hit, incomplete
-  records) cannot be overridden by human approval.
-- executing a real financial transaction (fund transfer/disbursement) always escalates to a human -- never automated.
+  DD, missing accredited-investor affirmation) cannot be overridden by
+  human approval.
+- committing fund capital into a portfolio company, or distributing exit
+  proceeds to LPs, always escalates to a human Investment Committee --
+  never automated.
 - every hold, approval and disbursement path is auditable.
-- personal and customer data stay outside Git.
+- LP personal/financial data and portfolio-company confidential data stay
+  outside Git.
 
 ## Decision Records
 
@@ -27,8 +34,8 @@ separate trust mark and should require security, audit and data-flow review.
 
 Certified operators can lose certification for:
 
-- bypassing the Financial Services Governor's policy checks
-- mishandling customer data
+- bypassing the InvestmentCommitteeGovernor's policy checks
+- mishandling LP or portfolio-company data
 - misrepresenting certification status
 - failing to respond to security incidents
 - hiding material changes to customer-facing operation
