@@ -38,13 +38,17 @@
   involuntary termination) full acceleration on top of it, but only ONE
   acceleration event per call -- no partial-acceleration provisions (e.g.
   \"12 months of additional vesting\" rather than 100%), which some real
-  grants negotiate instead; `option-exercise-economics` is intrinsic
-  value only (no tax treatment -- ISO vs. NSO, AMT, 83(b) elections); a
-  round mixing pre-money AND post-money SAFEs together, or post-money
-  SAFEs converting partly on a discount instead of their cap, is not
-  modeled (pick the one fn matching the round's actual convention); no
-  liquidation-preference stacking. Never silently claim this produces an
-  authoritative company-of-record cap table.")
+  grants negotiate instead; `option-exercise-tax-treatment` layers the
+  federal ISO-vs-NSO exercise-time distinction on top of
+  `option-exercise-economics`'s intrinsic-value math, but ONLY that
+  distinction -- an ISO's `:amt-preference-item` is the raw preference
+  item, NOT computed AMT liability (which needs the holder's whole tax
+  return), and 83(b) elections are not modeled at all; a round mixing
+  pre-money AND post-money SAFEs together, or post-money SAFEs converting
+  partly on a discount instead of their cap, is not modeled (pick the one
+  fn matching the round's actual convention); no liquidation-preference
+  stacking. Never silently claim this produces an authoritative
+  company-of-record cap table.")
 
 (defn safe-conversion
   "SAFE conversion math: the SAFE holder converts at whichever is more
@@ -392,8 +396,9 @@
   when the current fair-market-value-per-share is `fmv-per-share`.
   Underwater options (fmv <= strike) have `:intrinsic-value` 0, never
   negative -- nobody voluntarily exercises for a loss. Deliberately does
-  NOT model tax treatment (ISO vs. NSO, AMT, 83(b) elections) -- see ns
-  docstring.
+  NOT model tax treatment -- see `option-exercise-tax-treatment` for the
+  ISO/NSO distinction this fn omits, and its docstring for what even that
+  fn still does NOT model (full AMT liability, 83(b) elections).
 
   Returns `{:exercise-cost :market-value :intrinsic-value}`."
   [{:keys [shares strike-price fmv-per-share]}]
@@ -406,3 +411,49 @@
     {:exercise-cost exercise-cost
      :market-value market-value
      :intrinsic-value (max 0.0 (- market-value exercise-cost))}))
+
+(defn option-exercise-tax-treatment
+  "Federal U.S. tax treatment of exercising a stock option -- ISO
+  (Incentive Stock Option, IRC §422) vs. NSO (Non-qualified Stock Option,
+  IRC §83) -- the single most consequential exercise-time distinction,
+  layered on top of `option-exercise-economics`'s `:intrinsic-value` (the
+  spread) rather than duplicating that math.
+
+  `:nso` -- the spread is ordinary income, recognized immediately at
+  exercise (IRC §83(a)). `:ordinary-income-tax` = spread *
+  `ordinary-income-tax-rate` (a REAL marginal rate -- federal + state --
+  the caller supplies, never invented or looked up here). REQUIRED for
+  `:nso`.
+
+  `:iso` -- NO regular income tax at exercise (IRC §421(a)), but the
+  spread IS an Alternative Minimum Tax preference item (IRC §56(b)(3)).
+  This fn reports the PREFERENCE ITEM ONLY (`:amt-preference-item` = the
+  spread) -- it does NOT compute actual AMT liability, which depends on
+  the holder's entire tax return (AMT exemption phase-out, other
+  preference items, the regular-tax-vs-tentative-minimum-tax comparison)
+  and is genuinely out of scope here; a holder's real AMT impact needs
+  their own tax advisor/software. `ordinary-income-tax-rate` is ignored
+  for `:iso` (its regular-tax treatment at exercise is zero by statute,
+  not rate-dependent).
+
+  Every other key is `option-exercise-economics`'s own (`shares`/
+  `strike-price`/`fmv-per-share`), reused via that fn rather than
+  duplicated -- this fn's own validation is only for the two keys it
+  adds.
+
+  Returns `option-exercise-economics`'s map plus `:option-type` and
+  EITHER `:ordinary-income-tax` (`:nso`) OR `:amt-preference-item`
+  (`:iso`). Does NOT model 83(b) elections (early exercise of unvested
+  options/restricted stock) -- see ns docstring."
+  [{:keys [option-type ordinary-income-tax-rate] :as args}]
+  (when-not (contains? #{:iso :nso} option-type)
+    (throw (ex-info "option-exercise-tax-treatment: option-type must be :iso or :nso" {})))
+  (when (and (= option-type :nso)
+             (not (and ordinary-income-tax-rate (<= 0 ordinary-income-tax-rate 1))))
+    (throw (ex-info "option-exercise-tax-treatment: ordinary-income-tax-rate required and must be in [0,1] for :nso" {})))
+  (let [base (option-exercise-economics (dissoc args :option-type :ordinary-income-tax-rate))]
+    (case option-type
+      :nso (assoc base :option-type :nso
+                 :ordinary-income-tax (* (:intrinsic-value base) (double ordinary-income-tax-rate)))
+      :iso (assoc base :option-type :iso
+                 :amt-preference-item (:intrinsic-value base)))))

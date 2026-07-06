@@ -266,3 +266,44 @@
   (is (thrown? Exception (captable/option-exercise-economics {:shares -1 :strike-price 1 :fmv-per-share 1})))
   (is (thrown? Exception (captable/option-exercise-economics {:shares 1 :strike-price -1 :fmv-per-share 1})))
   (is (thrown? Exception (captable/option-exercise-economics {:shares 1 :strike-price 1 :fmv-per-share -1}))))
+
+;; ----------------------------- option-exercise-tax-treatment -----------------------------
+
+(deftest option-exercise-tax-treatment-nso-is-ordinary-income-at-exercise
+  (let [r (captable/option-exercise-tax-treatment
+           {:shares 10000 :strike-price 0.50 :fmv-per-share 3.00
+            :option-type :nso :ordinary-income-tax-rate 0.35})]
+    (is (= :nso (:option-type r)))
+    (is (close? 25000.0 (:intrinsic-value r)) "same spread option-exercise-economics computes")
+    (is (close? 8750.0 (:ordinary-income-tax r)) "25,000 spread * 35% ordinary rate")
+    (is (nil? (:amt-preference-item r)) "NSO has no AMT preference item")))
+
+(deftest option-exercise-tax-treatment-iso-has-no-regular-tax-but-an-amt-preference-item
+  (let [r (captable/option-exercise-tax-treatment
+           {:shares 10000 :strike-price 0.50 :fmv-per-share 3.00 :option-type :iso})]
+    (is (= :iso (:option-type r)))
+    (is (close? 25000.0 (:amt-preference-item r)) "the spread, an AMT preference item, NOT computed AMT liability")
+    (is (nil? (:ordinary-income-tax r)) "ISO owes no regular tax at exercise by statute")))
+
+(deftest option-exercise-tax-treatment-underwater-options-owe-no-tax-either-way
+  (let [nso (captable/option-exercise-tax-treatment
+             {:shares 10000 :strike-price 3.00 :fmv-per-share 0.50
+              :option-type :nso :ordinary-income-tax-rate 0.35})
+        iso (captable/option-exercise-tax-treatment
+             {:shares 10000 :strike-price 3.00 :fmv-per-share 0.50 :option-type :iso})]
+    (is (close? 0.0 (:ordinary-income-tax nso)))
+    (is (close? 0.0 (:amt-preference-item iso)))))
+
+(deftest option-exercise-tax-treatment-validation-rules
+  (is (thrown? Exception (captable/option-exercise-tax-treatment
+                          {:shares 1 :strike-price 1 :fmv-per-share 1 :option-type :rsu})))
+  (is (thrown? Exception (captable/option-exercise-tax-treatment
+                          {:shares 1 :strike-price 1 :fmv-per-share 1 :option-type :nso}))
+      "ordinary-income-tax-rate required for :nso")
+  (is (thrown? Exception (captable/option-exercise-tax-treatment
+                          {:shares 1 :strike-price 1 :fmv-per-share 1 :option-type :nso
+                           :ordinary-income-tax-rate 1.5}))
+      "ordinary-income-tax-rate must be in [0,1]")
+  (is (thrown? Exception (captable/option-exercise-tax-treatment
+                          {:shares -1 :strike-price 1 :fmv-per-share 1 :option-type :iso}))
+      "still reuses option-exercise-economics's own validation"))

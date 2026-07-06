@@ -140,9 +140,11 @@ fund denominated in a stablecoin (e.g. `"USDC"`) works today; a fund
 mixing a stablecoin-settled LP alongside a fiat LP now converts between
 them for reporting via `vcfund.nav/convert-currency` and
 `fund-nav-report`'s optional `:base-currency`/`:fx-rates` (caller-supplied
-rates only, never looked up or invented) -- see `vcfund.nav`'s docstring
-for what's still NOT covered (deal-level/distribution-level currency
-conversion).
+rates only, never looked up or invented) -- this covers LP-level
+commitment/called amounts AND a held deal's cost-basis/fair-value-mark
+(via the deal's own `:currency`); see `vcfund.nav`'s docstring for what's
+still NOT covered (`total-invested-at-cost`/distribution-waterfall
+figures, which carry no currency tag on their underlying records).
 
 ## Run
 
@@ -195,8 +197,8 @@ the same "self-contained sibling" relationship `cloud-itonami-isic-6511`'s
 | `src/vcfund/store.cljc` | **Store** protocol -- `MemStore` ‖ `DatomicStore` (`langchain.db`) + append-only audit ledger + capital-call/investment/follow-on/distribution/clawback-repayment/portfolio-report/board-seat/term-sheet/signature history; LPs carry an optional `:wallet-address` |
 | `src/vcfund/registry.cljc` | Capital-call pro-rata allocation + investment-commitment (initial + follow-on, referencing the original commitment number) draft records (`:safe`/`:convertible-note`/`:priced-equity`/`:saft`) + exit-distribution waterfall calc (deal-by-deal, documented limitation) + GP-clawback-repayment draft + portfolio-report + board-seat/governance-rights event drafts + `current-board-seats` roster projection + versioned term-sheet drafts + `term-sheet-diff` redline + e-signature drafts + `fully-executed?` |
 | `src/vcfund/pipeline.cljc` | Pure deal-pipeline funnel model (sourcing → screening → pitched → term-sheet → dd → ic-review), forward-only transitions, `:committed`/`:exited` reachable only via the real capital ops |
-| `src/vcfund/captable.cljc` | Pure SAFE/SAFT conversion (pre-money multi-SAFE AND post-money multi-SAFE circular-ownership closed-form solve), priced-round ownership/dilution (percentage AND absolute share-count terms), option-pool-shuffle, vesting schedules + change-of-control acceleration (single/double-trigger), and option-exercise economics (see docstring for what it deliberately does NOT model) |
-| `src/vcfund/nav.cljc` | Pure whole-fund NAV + unfunded-commitment (optional multi-currency `convert-currency`/`:base-currency`/`:fx-rates`) + management-fee-accrual (optional investment-period step-down) calculator, plus a store-aware `fund-nav-report` adapter |
+| `src/vcfund/captable.cljc` | Pure SAFE/SAFT conversion (pre-money multi-SAFE AND post-money multi-SAFE circular-ownership closed-form solve), priced-round ownership/dilution (percentage AND absolute share-count terms), option-pool-shuffle, vesting schedules + change-of-control acceleration (single/double-trigger), option-exercise economics AND `option-exercise-tax-treatment` (federal ISO-vs-NSO exercise-time distinction; ISO's AMT preference item, not computed liability) (see docstring for what it deliberately does NOT model) |
+| `src/vcfund/nav.cljc` | Pure whole-fund NAV + unfunded-commitment + management-fee-accrual (optional investment-period step-down) calculator, plus a store-aware `fund-nav-report` adapter -- OPTIONAL multi-currency `convert-currency`/`:base-currency`/`:fx-rates` on LP-level commitment/called amounts AND held-deal cost-basis/fair-value-mark (see docstring for what's still single-currency) |
 | `src/vcfund/waterfall.cljc` | Pure whole-fund (European-style) waterfall reconciliation + GP-clawback calculator, plus a store-aware `whole-fund-waterfall-report` adapter |
 | `src/vcfund/facts.cljc` | Per-jurisdiction fund-formation/exemption-regime catalog with an official spec-basis citation per entry, honest coverage reporting |
 | `src/vcfund/ddllm.cljc` | **DD-LLM Advisor** -- `mock-advisor` ‖ `llm-advisor`; LP-intake/DD/KYC/stage-advance/term-sheet-propose(+redline)/term-sheet-sign/capital-call/commitment/follow-on/portfolio-report/board-seat/distribution/clawback-repayment proposals |
@@ -219,14 +221,14 @@ fund-administration coverage:
 | Deal pipeline: sourcing → screening → pitched → term-sheet → dd → ic-review, forward-only, illegal transitions HARD-blocked (`vcfund.pipeline`) | Fund formation, LPA drafting, fund closes, side letters |
 | LP subscription intake + fund-wide accredited-investor gate | Term-sheet *redlining UI*/real e-signature integration (DocuSign etc.) -- `vcfund.registry/term-sheet-diff` computes the redline and `:term-sheet/sign` tracks execution state, but there's no document-rendering/markup UI or actual e-signature provider wired in |
 | Versioned term-sheet negotiation rounds with field-level redline diffs, AND two-sided e-signature execution tracking (`:term-sheet/propose`/`:term-sheet/sign`; `:investment/commit` requires the LATEST version to be signed by BOTH `:fund` and `:founder`, not merely proposed) | A round mixing pre-money AND post-money SAFEs together, or a post-money SAFE converting partly on a discount instead of its cap (`vcfund.captable`, see its docstring -- pick the fn matching the round's actual convention) |
-| Capital calls, pro-rata by commitment share, overcall-blocked | Option tax treatment (ISO/NSO/AMT, 83(b) elections) -- `vcfund.captable/option-exercise-economics` is intrinsic value only |
-| Deal DD checklist vs. named jurisdiction spec-basis, AND a HARD gate that `:investment/commit` requires the deal to have actually reached `:ic-review` in the pipeline | Deal-level/distribution-level currency conversion (`vcfund.nav`/`vcfund.waterfall`'s deal-by-deal math is still single-currency; only LP-level commitment/called amounts are FX-aware, see "Crypto-native operation") |
+| Capital calls, pro-rata by commitment share, overcall-blocked | 83(b) elections (early exercise of unvested options/restricted stock) -- not modeled by `vcfund.captable/option-exercise-tax-treatment` at all |
+| Deal DD checklist vs. named jurisdiction spec-basis, AND a HARD gate that `:investment/commit` requires the deal to have actually reached `:ic-review` in the pipeline | `total-invested-at-cost`/distribution-waterfall currency conversion -- commitment-history/distribution records carry no currency tag, so only LP-level amounts AND held-deal cost-basis/fair-value-mark are FX-aware (see "Crypto-native operation"), not these two |
 | AML/sanctions screening (LPs, founders; wallet addresses screen the same way as passport numbers, see "Crypto-native operation") | Tax reporting (K-1s etc.), regulatory filings (Form D/ADV), real fund-accounting-system integration |
-| Investment-Committee capital deployment (`:safe`/`:convertible-note`/`:priced-equity`/`:saft`), initial AND dedicated follow-on (`:investment/follow-on`, HARD-gated on the deal already being `:committed`, referencing the original commitment number so the audit trail links every tranche back to the deal's first investment) | |
-| Portfolio-company KPI/board reporting for committed deals (`:portfolio/report`, HARD-gated on the deal actually being committed) | |
+| Investment-Committee capital deployment (`:safe`/`:convertible-note`/`:priced-equity`/`:saft`), initial AND dedicated follow-on (`:investment/follow-on`, HARD-gated on the deal already being `:committed`, referencing the original commitment number so the audit trail links every tranche back to the deal's first investment) | A round mixing pre-money AND post-money SAFEs together, or a post-money SAFE converting partly on a discount instead of its cap (`vcfund.captable`, see its docstring -- pick the fn matching the round's actual convention) |
+| Portfolio-company KPI/board reporting for committed deals (`:portfolio/report`, HARD-gated on the deal actually being committed) | Actual AMT (Alternative Minimum Tax) LIABILITY for ISO exercises -- `option-exercise-tax-treatment` reports the raw preference item only, never the holder's real tax owed (needs their whole return) |
 | Board-seat/governance-rights administration -- grant AND revocation events (`:governance/board-seat`, HARD-gated on the deal actually being committed, same posture as portfolio reporting; `vcfund.registry/current-board-seats` projects the current roster from the append-only event log) | |
-| SAFE/SAFT-conversion (pre-money multi-SAFE AND post-money multi-SAFE circular-ownership closed-form solve, `vcfund.captable/post-money-multi-safe-conversion-shares`), priced-round ownership/dilution (percentage AND absolute share-count terms), option-pool-shuffle, vesting schedules with single/double-trigger change-of-control acceleration, and option-exercise economics (`vcfund.captable`) | |
-| Whole-fund NAV, unfunded-commitment (OPTIONAL LP-level multi-currency FX conversion, `vcfund.nav/convert-currency`, caller-supplied rates only) and management-fee-accrual reporting, with an OPTIONAL single step-down after the investment period (`vcfund.nav`, fair value defaults to cost basis until a `:fair-value-mark` KPI is recorded) | |
+| SAFE/SAFT-conversion (pre-money multi-SAFE AND post-money multi-SAFE circular-ownership closed-form solve, `vcfund.captable/post-money-multi-safe-conversion-shares`), priced-round ownership/dilution (percentage AND absolute share-count terms), option-pool-shuffle, vesting schedules with single/double-trigger change-of-control acceleration, and option-exercise economics WITH the federal ISO-vs-NSO exercise-time tax distinction (`vcfund.captable`) | |
+| Whole-fund NAV, unfunded-commitment (OPTIONAL LP-level AND held-deal-level multi-currency FX conversion, `vcfund.nav/convert-currency`, caller-supplied rates only) and management-fee-accrual reporting, with an OPTIONAL single step-down after the investment period (`vcfund.nav`, fair value defaults to cost basis until a `:fair-value-mark` KPI is recorded) | |
 | Whole-fund (European-style) waterfall reconciliation + a real, governed GP-clawback REPAYMENT act (`:waterfall/clawback-repay`, HARD-gated on the requested amount never exceeding the INDEPENDENTLY recomputed `vcfund.waterfall/whole-fund-waterfall-report` entitlement -- the governor never trusts the proposal's self-reported figure) | |
 | Exit-proceeds waterfall (deal-by-deal: return of capital → preferred return → GP carry -- what actually pays out; `vcfund.waterfall` reconciles against it, doesn't replace it) | |
 | Crypto-native: `:saft` security type, `vcfund.captable/saft-conversion` (token-allocation-% math), LP `:wallet-address` for on-chain settlement (see "Crypto-native operation") | |
@@ -246,8 +248,10 @@ follow-on-investment op and a real governed GP-clawback-repayment op, then
 a governed board-seat/governance-rights op, a management-fee investment-
 period step-down, and change-of-control vesting acceleration, then a
 closed-form post-money multi-SAFE simultaneous-conversion solve and
-OPTIONAL LP-level multi-currency FX conversion, were the additions beyond
-the initial four-gate R0.
+OPTIONAL LP-level multi-currency FX conversion, then the federal
+ISO-vs-NSO option-exercise tax distinction and held-deal-level multi-
+currency FX conversion, were the additions beyond the initial four-gate
+R0.
 
 ## Jurisdiction coverage (honest)
 

@@ -188,3 +188,20 @@
           "5,000,000 USD + 1,000,000 JPY @ 0.01 -> 5,010,000 USD")
       (is (close? 100200.0 (:management-fees-accrued r))
           "fee basis is the FX-converted total commitments: 5,010,000 * 2% * 1y"))))
+
+(deftest fund-nav-report-converts-a-deals-currency-for-held-fair-value
+  (testing "a committed deal denominated in a non-base currency has its cost-basis/fair-value-mark FX-converted"
+    (let [db (store/seed-db)
+          d1 (assoc (store/deal db "deal-1") :currency "JPY")]
+      (store/with-deals db {"deal-1" d1})
+      (store/commit-record! db {:effect :capital-call/mark-issued :path ["deal-1"]
+                                :payload {:jurisdiction "USA" :call-amount 2000000 :notice-date "2026-07-06"}})
+      (store/commit-record! db {:effect :investment/mark-committed :path ["deal-1"]})
+      (testing "unmarked -- cost-basis converts"
+        (let [r (nav/fund-nav-report db {:base-currency "USD" :fx-rates {"JPY" 0.01}})]
+          (is (close? 20000.0 (:held-fair-value r)) "2,000,000 JPY cost-basis @ 0.01 -> 20,000 USD")))
+      (store/commit-record! db {:effect :portfolio/report-logged :path ["deal-1"]
+                                :payload {:period "2026-Q3" :kpis {:fair-value-mark 3000000}}})
+      (testing "marked -- fair-value-mark converts (in the deal's own currency)"
+        (let [r (nav/fund-nav-report db {:base-currency "USD" :fx-rates {"JPY" 0.01}})]
+          (is (close? 30000.0 (:held-fair-value r)) "3,000,000 JPY mark @ 0.01 -> 30,000 USD"))))))

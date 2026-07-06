@@ -22,14 +22,18 @@
   2% -> 1.5%, around year 5 -- see `:investment-period-years`/
   `:post-investment-period-rate`; a fund with more than one step, or a
   compounding/re-basing schedule, is still not modeled); multi-currency FX
-  is PARTIALLY modeled via `convert-currency`/`unfunded-commitments`'s
-  OPTIONAL `:base-currency`/`:fx-rates` (LP-level commitment/called
-  amounts convert into one base currency, given caller-supplied rates --
-  never looked up or invented here) -- deal-level (commitment/
-  distribution) currency conversion is a separate, still-unmodeled gap;
-  a deal's fair value defaults to its cost basis (the commitment amount)
-  until an operator records a `:fair-value-mark` KPI via `:portfolio/
-  report` -- never silently mark up an unvalued investment."
+  is PARTIALLY modeled via `convert-currency`/OPTIONAL `:base-currency`/
+  `:fx-rates` (REAL caller-supplied rates, never looked up or invented) on
+  TWO layers -- `unfunded-commitments` (LP-level commitment/called
+  amounts) and `fund-nav-report`'s held-investment valuation (a deal's
+  cost-basis/`:fair-value-mark`, converted via the deal's own `:currency`)
+  -- but NOT a third: `total-invested-at-cost` (summed from commitment-
+  history records, which do not themselves carry a currency tag) and
+  every distribution/waterfall figure stay single-currency, a still-
+  unmodeled gap; a deal's fair value defaults to its cost basis (the
+  commitment amount) until an operator records a `:fair-value-mark` KPI
+  via `:portfolio/report` -- never silently mark up an unvalued
+  investment."
   (:require [vcfund.store :as store]))
 
 (def default-management-fee-rate
@@ -191,10 +195,14 @@
   `investment-period-years`/`post-investment-period-rate` -- OPTIONAL, see
   `management-fee-accrued` for the step-down they model; omit both for the
   flat-rate default.
-  `base-currency`/`fx-rates` -- OPTIONAL, see `unfunded-commitments` for
-  the LP-level FX conversion they enable; omit both for single-currency,
-  no-conversion behavior (the default -- every earlier caller's exact
-  behavior)."
+  `base-currency`/`fx-rates` -- OPTIONAL; converts LP-level commitment/
+  called amounts (see `unfunded-commitments`) AND each held deal's
+  cost-basis/fair-value-mark (via the deal's own `:currency`) into ONE
+  base currency. Does NOT convert `total-invested-at-cost` (summed from
+  commitment-history records, which carry no currency tag) or any
+  distribution/waterfall figure -- those stay single-currency regardless
+  (see ns docstring). Omit both for single-currency, no-conversion
+  behavior (the default -- every earlier caller's exact behavior)."
   ([st] (fund-nav-report st {}))
   ([st {:keys [fund-life-years annual-fee-rate investment-period-years post-investment-period-rate
               base-currency fx-rates]
@@ -221,10 +229,11 @@
                                    :investment-period-years investment-period-years
                                    :post-investment-period-rate post-investment-period-rate})
         investments (mapv (fn [d]
-                            {:deal-id (:id d)
-                             :cost-basis (double (:ask-amount d))
-                             :fair-value (latest-fair-value-mark st (:id d))
-                             :exited? (= :exited (:status d))})
+                            (let [fv (latest-fair-value-mark st (:id d))]
+                              {:deal-id (:id d)
+                               :cost-basis (conv (:ask-amount d) (:currency d))
+                               :fair-value (when fv (conv fv (:currency d)))
+                               :exited? (= :exited (:status d))}))
                           committed-deals)]
     (assoc (fund-nav {:total-called total-called
                       :total-invested-at-cost total-invested-at-cost

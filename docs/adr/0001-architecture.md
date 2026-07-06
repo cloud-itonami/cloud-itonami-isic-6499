@@ -672,3 +672,76 @@ redlining UI, mixed pre-money/post-money or mixed cap/discount post-money
 multi-SAFE rounds, option tax treatment (ISO/NSO/AMT, 83(b)), deal-level/
 distribution-level currency conversion, tax/regulatory reporting (K-1s,
 Form D/ADV).
+
+## Addendum 9 (2026-07-06, same day, autonomous /loop iteration): ISO/NSO option-exercise tax distinction, held-deal-level multi-currency FX
+
+Again no new explicit owner direction -- the recurring `/loop` prompt
+asked for coverage/maturity improvement. Of Addendum 8's remaining-gaps
+list, this autonomously picked the two items with the best effort/risk
+ratio: "option tax treatment" (scoped down to just the ISO-vs-NSO
+exercise-time distinction, deliberately NOT full AMT liability -- see
+below) and the held-investment slice of "deal-level currency
+conversion." Skipped this iteration, and reconsidered rather than forced:
+mixed pre-money/post-money (or mixed cap/discount post-money) multi-SAFE
+rounds have no single clear market convention to encode -- an honest
+"unmodeled, pick the fn matching your round's actual convention" is
+better than a synthetic answer; `total-invested-at-cost`/distribution-
+waterfall FX conversion would require adding a `currency` field to
+`vcfund.registry/register-commitment`'s record shape, a signature change
+that cascades across every existing call site (`store.cljc`,
+`registry_test.clj`, `store_contract_test.clj`, `governor_contract_test.clj`,
+`nav_test.clj`, `waterfall_test.clj`) for a fund whose demo deals are all
+single-currency anyway -- deferred as a larger, separately-scoped piece
+of work rather than rushed; e-signature-provider integration and tax/
+regulatory reporting remain genuine boundaries (real third-party
+integration / real regulatory-filing content), same as every prior
+addendum's reasoning.
+
+- **ISO/NSO option-exercise tax distinction** -- new fn
+  `vcfund.captable/option-exercise-tax-treatment`, layered on top of
+  `option-exercise-economics`'s `:intrinsic-value` (the spread) via
+  `dissoc` + delegate, the same reuse-don't-duplicate pattern
+  `accelerated-vesting` established for `vesting-schedule`. `:nso` ->
+  the spread is ordinary income at exercise (IRC §83(a)):
+  `:ordinary-income-tax` = spread * a REQUIRED, caller-supplied
+  `ordinary-income-tax-rate` (never invented). `:iso` -> no regular tax
+  at exercise (IRC §421(a)), but the spread IS an AMT preference item
+  (IRC §56(b)(3)): `:amt-preference-item` = the spread. Deliberately
+  bounded to be honest rather than complete: this reports the PREFERENCE
+  ITEM only, never computed AMT LIABILITY (which needs the holder's
+  entire tax return -- exemption phase-out, other preference items, the
+  regular-tax-vs-tentative-minimum-tax comparison -- out of scope, a real
+  tax advisor's job). 83(b) elections are not modeled at all.
+- **Held-deal-level multi-currency FX** -- `fund-nav-report`'s
+  `investments` construction (cost-basis from a deal's `:ask-amount`,
+  fair-value from a `:fair-value-mark` KPI) now runs through the SAME
+  `conv` closure already threading `:base-currency`/`:fx-rates` through
+  the LP-level calculations added in Addendum 8 -- using the deal's own
+  `:currency` field (already present on every deal record; no schema
+  change needed). This closes the MORE visible, MORE important half of
+  "deal-level FX" for NAV purposes: a held (un-exited) investment's
+  CURRENT value, in a multi-currency portfolio. The other half --
+  `total-invested-at-cost` (historical sum over commitment-history
+  records) and every distribution/waterfall figure -- remains
+  single-currency, honestly documented as still open (see above).
+- Neither addition touches `vcfund.governor`/`vcfund.phase`/
+  `vcfund.store`/`vcfund.operation` -- both are pure-calculator
+  extensions with no governor gating, so this iteration adds zero new
+  governed decision gates; the "twelve governed decision gates" count is
+  unchanged from Addendum 8.
+
+Consequences: `test/vcfund/*` grew from 153 tests/599 assertions to 158
+tests/614 assertions (new `option-exercise-tax-treatment` tests -- NSO
+ordinary-income, ISO AMT-preference-item, underwater-options-owe-nothing
+for both, and validation rules including reuse of `option-exercise-
+economics`'s own checks -- in `captable_test.clj`; a new held-deal FX
+test covering both the unmarked cost-basis case and the marked
+fair-value case in `nav_test.clj`), still lint-clean; demo (`clojure
+-M:dev:run`) unaffected (same reasoning as Addendum 8 -- neither addition
+is a governed op). Remaining honest gaps (tracked in README's
+"Business-process coverage" table): a real e-signature PROVIDER
+integration and redlining UI, mixed pre-money/post-money or mixed
+cap/discount post-money multi-SAFE rounds, actual AMT LIABILITY
+computation and 83(b) elections, `total-invested-at-cost`/distribution-
+waterfall currency conversion, tax/regulatory reporting (K-1s, Form
+D/ADV).

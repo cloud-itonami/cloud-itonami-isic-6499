@@ -52,12 +52,15 @@
 - SAFE/SAFT-conversion (both pre-money and post-money multi-SAFE
   simultaneous-conversion conventions), priced-round ownership/dilution
   (percentage and absolute share-count terms), option-pool-shuffle,
-  vesting (with single/double-trigger change-of-control acceleration) and
-  option-exercise estimates
+  vesting (with single/double-trigger change-of-control acceleration),
+  option-exercise estimates and the federal ISO-vs-NSO exercise-time tax
+  distinction (ordinary income vs. an AMT preference item -- not full AMT
+  liability)
 - crypto-native deal support (SAFT token deals, on-chain LP wallet settlement)
 - whole-fund NAV, unfunded-commitment (optional multi-currency conversion
-  for LPs denominated in different currencies) and management-fee
-  reporting (optional step-down after the investment period)
+  for LPs AND held deals denominated in different currencies) and
+  management-fee reporting (optional step-down after the investment
+  period)
 - exit-proceeds waterfall distribution proposal
 - immutable audit ledger
 
