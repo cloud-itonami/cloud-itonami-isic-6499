@@ -1,6 +1,6 @@
 (ns vcfund.registry
-  "Pure-function investment-commitment and exit-distribution record
-  construction -- an append-only venture-fund capital-movement draft.
+  "Pure-function capital-call, investment-commitment and exit-distribution
+  record construction -- an append-only venture-fund capital-movement draft.
 
   Like `cloud-itonami-isic-6511`'s `underwriting.registry`, there is no
   single international identifier standard for a fund's investment-
@@ -58,6 +58,77 @@
                 "immutable" true}]
     {"record" record "commitment_number" commitment-number
      "certificate" (unsigned-certificate "InvestmentCommitmentCertificate" commitment-number commitment-number)}))
+
+(def default-notice-period-days
+  "Standard capital-call notice period -- an LP must fund a call within
+  this many days of the notice date. 10 business days is a common market
+  default; a real fund cites its own LPA's actual notice-period clause."
+  10)
+
+(defn capital-call-allocations
+  "Pure pro-rata capital-call allocation across LPs, by commitment share.
+  Never mutates any LP record -- the store applies each
+  `:new-called-amount` when the call is actually issued (governor-gated,
+  see `vcfund.governor/overcall-violations`).
+
+  `lps` -- coll of `{:id .. :commitment-amount .. :called-amount ..}`
+  (`:called-amount` defaults to 0 if absent -- an LP not yet called from).
+  `call-amount` -- the total amount the fund needs to draw down for this
+  call, before pro-rata split.
+
+  Returns one map per LP: `{:lp-id :commitment-amount :called-amount
+  :allocation :new-called-amount :overcall?}`. `:overcall?` true means
+  this LP's cumulative called amount would exceed their commitment -- a
+  HARD violation, never silently capped or dropped."
+  [lps call-amount]
+  (when (neg? call-amount) (throw (ex-info "capital-call: call-amount must be >= 0" {})))
+  (when (empty? lps) (throw (ex-info "capital-call: no LP commitments on file" {})))
+  (let [total-committed (reduce + (map :commitment-amount lps))]
+    (when (zero? total-committed)
+      (throw (ex-info "capital-call: total LP commitment is zero" {})))
+    (mapv (fn [{:keys [id commitment-amount called-amount]}]
+            (let [commitment-amount (double commitment-amount)
+                  called-amount (double (or called-amount 0))
+                  share (/ commitment-amount (double total-committed))
+                  allocation (* share (double call-amount))
+                  new-called (+ called-amount allocation)]
+              {:lp-id id
+               :commitment-amount commitment-amount
+               :called-amount called-amount
+               :allocation allocation
+               :new-called-amount new-called
+               :overcall? (> new-called commitment-amount)}))
+          lps)))
+
+(defn register-capital-call
+  "Validate + construct a capital-call notice DRAFT -- drawing committed
+  capital in from LPs, pro-rata by commitment share. Pure function -- does
+  not touch any real banking/wire system or move any real capital; it
+  builds the RECORD an operator would keep and send to LPs."
+  [allocations call-amount jurisdiction sequence notice-date]
+  (when (empty? allocations)
+    (throw (ex-info "capital-call: allocations required" {})))
+  (when (neg? call-amount)
+    (throw (ex-info "capital-call: call-amount must be >= 0" {})))
+  (when-not (and jurisdiction (not= jurisdiction ""))
+    (throw (ex-info "capital-call: jurisdiction required" {})))
+  (when (< sequence 0)
+    (throw (ex-info "capital-call: sequence must be >= 0" {})))
+  (when-not (and notice-date (not= notice-date ""))
+    (throw (ex-info "capital-call: notice-date required" {})))
+  (let [call-number (str (str/upper-case jurisdiction) "-CALL-" (zero-pad sequence 6))
+        record {"record_id" call-number
+                "kind" "capital-call-draft"
+                "call_amount" (double call-amount)
+                "allocations" (mapv (fn [{:keys [lp-id allocation new-called-amount]}]
+                                      {"lp_id" lp-id "allocation" allocation
+                                       "new_called_amount" new-called-amount})
+                                    allocations)
+                "notice_date" notice-date
+                "funding_due_days" default-notice-period-days
+                "immutable" true}]
+    {"record" record "call_number" call-number
+     "certificate" (unsigned-certificate "CapitalCallCertificate" call-number call-number)}))
 
 (defn distribute-waterfall
   "Compute a DEAL-BY-DEAL exit waterfall for ONE investment record --

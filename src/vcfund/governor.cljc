@@ -8,15 +8,17 @@
   UnderwritingGovernor, `cloud-itonami-M6910`'s RegistrarGovernor and
   `cloud-itonami-L6810`'s RealtorGovernor.
 
-  Five checks, in priority order. The first four are HARD violations: a
+  Six checks, in priority order. The first five are HARD violations: a
   human approver CANNOT override them (you don't get to approve your way
   past a sanctions hit, a fabricated fund-formation spec-basis, incomplete
-  DD, or an LP missing an accredited-investor affirmation). The last is
-  SOFT: it asks a human to look (low confidence / actuation), and the human
-  may approve -- but see `vcfund.phase`: for `:investment/commit` and
-  `:exit/distribute` (real capital movement, in either direction) NO phase
-  ever allows auto-commit either. Two independent layers agree that both
-  directions of actuation are always a human call.
+  DD, an LP missing an accredited-investor affirmation, or a capital call
+  that would overcall an LP past their commitment). The last is SOFT: it
+  asks a human to look (low confidence / actuation), and the human may
+  approve -- but see `vcfund.phase`: for `:capital-call/issue`,
+  `:investment/commit` and `:exit/distribute` (real capital movement, in
+  any of the three directions) NO phase ever allows auto-commit either.
+  Two independent layers agree that all three directions of actuation are
+  always a human call.
 
     1. Spec-basis        -- did the DD proposal cite an OFFICIAL
                              fund-formation/exemption source
@@ -25,27 +27,36 @@
                              sanctions/PEP hit (screened or on file)?
     3. DD incomplete      -- for an investment commitment, is the deal's
                              required DD checklist actually satisfied?
-    4. Accredited investor -- for an investment commitment, does every LP
-                             in the fund have a recorded accredited-
-                             investor/QP affirmation? (fund-wide: the whole
-                             vehicle's exemption depends on every investor
-                             qualifying, not just the one deal.)
-    5. Confidence floor / actuation gate -- LLM confidence below threshold,
-                             OR the op is `:investment/commit` /
-                             `:exit/distribute` -> escalate."
+    4. Accredited investor -- for a capital call or investment commitment,
+                             does every LP in the fund have a recorded
+                             accredited-investor/QP affirmation? (fund-wide:
+                             the whole vehicle's exemption depends on every
+                             investor qualifying, not just the one deal.)
+    5. Capital-call overcall -- does the requested call amount, allocated
+                             pro-rata by commitment share
+                             (`vcfund.registry/capital-call-allocations`),
+                             push any LP's cumulative called amount past
+                             their commitment? Recomputed independently
+                             from store data -- never trust the advisor's
+                             self-reported allocation.
+    6. Confidence floor / actuation gate -- LLM confidence below threshold,
+                             OR the op is `:capital-call/issue`,
+                             `:investment/commit` or `:exit/distribute` ->
+                             escalate."
   (:require [vcfund.facts :as facts]
+            [vcfund.registry :as registry]
             [vcfund.store :as store]))
 
 (def confidence-floor 0.6)
 
 (def high-stakes
   "Stakes grave enough to always require a human, even when clean.
-  A VC fund moves real capital in TWO independent directions -- deploying
-  it into a portfolio company, and returning proceeds to LPs -- so, unlike
-  the life-insurance template (exactly one actuation stake), this set has
-  two members on purpose: neither is a gradation of the other, both are
-  absolute."
-  #{:actuation/deploy :actuation/distribute})
+  A VC fund moves real capital in THREE independent directions -- calling
+  committed capital in from LPs, deploying it into a portfolio company, and
+  returning proceeds to LPs -- so, unlike the life-insurance template
+  (exactly one actuation stake), this set has three members on purpose:
+  none is a gradation of the others, all three are absolute."
+  #{:actuation/call :actuation/deploy :actuation/distribute})
 
 ;; ----------------------------- checks -----------------------------
 
@@ -89,18 +100,31 @@
           :detail "案件の必要DD書類が充足していない状態での投資実行提案"}]))))
 
 (defn- accredited-investor-violations
-  "For `:investment/commit`, EVERY LP in the fund must have a recorded
-  accredited-investor/qualified-purchaser affirmation -- not just the LPs
-  tied to this one deal. The fund's securities exemption (Reg D 506(b)/(c),
-  Investment Company Act §3(c)(1)/§3(c)(7)) is a fund-wide fact: a single
-  unaccredited LP on file taints every subsequent capital deployment, not
-  just their own allocation."
+  "For a capital call or an investment commitment, EVERY LP in the fund
+  must have a recorded accredited-investor/qualified-purchaser affirmation
+  -- not just the LPs tied to this one deal. The fund's securities
+  exemption (Reg D 506(b)/(c), Investment Company Act §3(c)(1)/§3(c)(7)) is
+  a fund-wide fact: a single unaccredited LP on file taints every
+  subsequent capital call or deployment, not just their own allocation."
   [{:keys [op]} st]
-  (when (= op :investment/commit)
+  (when (contains? #{:capital-call/issue :investment/commit} op)
     (let [unaffirmed (remove :accredited? (store/all-lps st))]
       (when (seq unaffirmed)
         [{:rule :accredited-investor-violation
-          :detail (str "適格投資家確認が未了のLPが" (count unaffirmed) "件存在するため投資実行不可")}]))))
+          :detail (str "適格投資家確認が未了のLPが" (count unaffirmed) "件存在するため実行不可")}]))))
+
+(defn- overcall-violations
+  "For `:capital-call/issue`, recompute the pro-rata allocation
+  independently from store data (`vcfund.registry/capital-call-allocations`)
+  -- never trust the advisor's self-reported allocation. If any LP's
+  cumulative called amount would exceed their commitment, HOLD."
+  [{:keys [op call-amount]} st]
+  (when (= op :capital-call/issue)
+    (let [allocations (registry/capital-call-allocations (store/all-lps st) call-amount)
+          overcalled (filter :overcall? allocations)]
+      (when (seq overcalled)
+        [{:rule :capital-call-overcall
+          :detail (str (count overcalled) "件のLPでコミットメント額を超過するコールとなるため発行不可")}]))))
 
 (defn- commitment-missing-violations
   "For `:exit/distribute`, a commitment record must already exist for the
@@ -128,6 +152,7 @@
                            (sanctions-violations request proposal st)
                            (dd-incomplete-violations request st)
                            (accredited-investor-violations request st)
+                           (overcall-violations request st)
                            (commitment-missing-violations request st)))
         conf (:confidence proposal 0.0)
         low? (< conf confidence-floor)

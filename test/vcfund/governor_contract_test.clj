@@ -3,10 +3,11 @@
   `cloud-itonami-isic-6511`'s `underwriting.governor-contract-test`. The
   single invariant under test:
 
-    DD-LLM never commits capital or distributes proceeds the
-    InvestmentCommitteeGovernor would reject, `:investment/commit` and
-    `:exit/distribute` NEVER auto-commit at any phase, and every decision
-    (commit OR hold) leaves exactly one ledger fact."
+    DD-LLM never calls, commits or distributes capital the
+    InvestmentCommitteeGovernor would reject, `:capital-call/issue`,
+    `:investment/commit` and `:exit/distribute` NEVER auto-commit at any
+    phase, and every decision (commit OR hold) leaves exactly one ledger
+    fact."
   (:require [clojure.test :refer [deftest is testing]]
             [langgraph.graph :as g]
             [vcfund.store :as store]
@@ -80,6 +81,51 @@
         (is (= :hold (get-in res [:state :disposition])))
         (is (some #{:accredited-investor-violation} (-> (store/ledger db) last :basis)))
         (is (nil? (store/commitment-of db "deal-1")))))))
+
+(deftest capital-call-overcall-is-held-and-unoverridable
+  (testing "a call far exceeding total fund commitments -> HOLD, never reaches a human"
+    (let [[db actor] (fresh)
+          res (exec-op actor "t11" {:op :capital-call/issue :subject "deal-1"
+                                    :call-amount 20000000 :notice-date "2026-07-06"} operator)]
+      (is (= :hold (get-in res [:state :disposition])) "settles immediately, no interrupt")
+      (is (not= :interrupted (:status res)))
+      (is (some #{:capital-call-overcall} (-> (store/ledger db) first :basis)))
+      (is (empty? (store/capital-call-history db)) "no call record written")
+      (is (zero? (:called-amount (store/lp db "lp-1"))) "no LP called-amount advanced"))))
+
+(deftest capital-call-blocked-by-an-unaccredited-lp-fund-wide
+  (testing "a capital call cannot be issued while ANY LP in the fund lacks accreditation"
+    (let [[db actor] (fresh)]
+      (store/with-lps db {"lp-3" {:id "lp-3" :name "Unaffirmed LP" :commitment-amount 250000
+                                  :called-amount 0 :currency "USD" :jurisdiction "USA"
+                                  :accredited? false :status :pending}})
+      (let [res (exec-op actor "t12" {:op :capital-call/issue :subject "deal-1"
+                                      :call-amount 100000 :notice-date "2026-07-06"} operator)]
+        (is (= :hold (get-in res [:state :disposition])))
+        (is (some #{:accredited-investor-violation} (-> (store/ledger db) first :basis)))
+        (is (empty? (store/capital-call-history db)))))))
+
+(deftest capital-call-issue-always-escalates-then-human-decides
+  (testing "a clean, pro-rata call still ALWAYS interrupts for human approval -- actuation/call is never auto"
+    (let [[db actor] (fresh)
+          r1 (exec-op actor "t13" {:op :capital-call/issue :subject "deal-1"
+                                   :call-amount 2000000 :notice-date "2026-07-06"} operator)]
+      (is (= :interrupted (:status r1)) "pauses for human approval even when governor-clean")
+      (testing "approve -> commit, capital-call record drafted and LP called-amounts advance"
+        (let [r2 (approve! actor "t13")]
+          (is (= :commit (get-in r2 [:state :disposition])))
+          (is (= 1 (count (store/capital-call-history db))) "one draft capital-call record")
+          (is (pos? (:called-amount (store/lp db "lp-1"))))
+          (is (pos? (:called-amount (store/lp db "lp-2"))))))))
+  (testing "reject -> hold, nothing called"
+    (let [[db actor] (fresh)
+          _ (exec-op actor "t14" {:op :capital-call/issue :subject "deal-1"
+                                  :call-amount 2000000 :notice-date "2026-07-06"} operator)
+          r2 (g/run* actor {:approval {:status :rejected :by "op-1"}}
+                     {:thread-id "t14" :resume? true})]
+      (is (= :hold (get-in r2 [:state :disposition])))
+      (is (empty? (store/capital-call-history db)) "nothing called on reject")
+      (is (zero? (:called-amount (store/lp db "lp-1")))))))
 
 (deftest exit-distribute-without-a-commitment-is-held
   (testing "exit/distribute for a deal with no prior investment commitment -> HOLD (commitment-missing)"

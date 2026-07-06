@@ -166,3 +166,41 @@ investment decision-making that `6499` itself names), the same
 | One `high-stakes` member, matching the insurance template exactly | ❌ | A VC fund genuinely has two independent real-money-movement directions (capital in, proceeds out); collapsing them to one would hide that a clean exit distribution needs its own independent human sign-off, not a re-use of the commitment approval |
 | Require a whole-fund European waterfall with cross-deal netting/clawback for R0 | ❌ | Needs fund-level state beyond a single investment record; scoped out honestly rather than half-implemented |
 | Wrap/require `kotoba-lang/insurance`-style shared capability lib | ❌ | Neither `formation.*`, `realty.*` nor `underwriting.*` require a sibling capability lib; keeping the actor self-contained matches the established pattern |
+
+## Addendum (2026-07-06, same day): capital calls -- the biggest R0 coverage gap, closed
+
+An honest coverage review of the R0 actor (four gates: LP intake, DD,
+investment commit, exit distribute) found its most consequential gap: LPs'
+committed capital was modeled as accepted in full at subscription, with no
+mechanism for the fund to draw it down incrementally as deals actually
+need funding -- the real-world capital-call mechanism every committed-
+capital fund vehicle runs on. Closed by adding a fifth governed op:
+
+- **`:capital-call/issue`** -- `vcfund.registry/capital-call-allocations`
+  computes a pure pro-rata split of a requested call amount across all LPs
+  by commitment share (never mutating any LP record); each LP carries a
+  new `:called-amount` field advanced only on a governor-cleared,
+  human-approved call. `vcfund.registry/register-capital-call` drafts the
+  notice record (fund-scoped `{JURISDICTION}-CALL-{seq}` number,
+  `default-notice-period-days` = 10, cited as a market-default assumption,
+  not a specific LPA's actual clause).
+- **New HARD check, `overcall-violations`** (`vcfund.governor`) --
+  recomputes the allocation independently from store data (same discipline
+  as `dd-incomplete-violations`: never trust the advisor's self-reported
+  numbers) and HOLDS, un-overridably, if any LP's cumulative called amount
+  would exceed their commitment.
+- **`accredited-investor-violations` extended** to also gate
+  `:capital-call/issue`, not just `:investment/commit` -- the fund's
+  securities exemption is fund-wide and applies the moment LP capital is
+  drawn in, not only when it is deployed out.
+- **Third `high-stakes` member, `:actuation/call`** -- a VC fund moves real
+  capital in three directions, not two; calling capital in is its own
+  absolute actuation event, gated identically (governor + phase, both
+  layers) to deployment and distribution.
+
+Consequences: `test/vcfund/*` grew from 33 tests/153 assertions to 45
+tests/219 assertions, still lint-clean. Remaining honest gaps (unchanged by
+this addendum, tracked in README's "Business-process coverage" table):
+deal pipeline/sourcing-funnel management, term-sheet/cap-table/valuation
+math, portfolio-company monitoring between commit and exit, whole-fund
+NAV/European waterfall, tax/regulatory reporting.

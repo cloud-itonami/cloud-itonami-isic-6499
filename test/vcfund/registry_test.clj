@@ -31,6 +31,71 @@
       (is (thrown? Exception
                    (r/register-commitment company security-type amount jurisdiction 1))))))
 
+;; ----------------------------- capital calls -----------------------------
+
+(def lps-fixture
+  [{:id "lp-1" :commitment-amount 5000000 :called-amount 0}
+   {:id "lp-2" :commitment-amount 1000000 :called-amount 0}])
+
+(deftest capital-call-allocations-split-pro-rata-by-commitment-share
+  (let [allocs (r/capital-call-allocations lps-fixture 2000000)
+        by-id (into {} (map (juxt :lp-id identity)) allocs)]
+    (is (close? (/ 10000000.0 6) (:allocation (get by-id "lp-1"))))
+    (is (close? (/ 2000000.0 6) (:allocation (get by-id "lp-2"))))
+    (is (not (:overcall? (get by-id "lp-1"))))
+    (is (not (:overcall? (get by-id "lp-2"))))))
+
+(deftest capital-call-allocations-flag-overcall
+  (testing "a call far exceeding total commitments overcalls every LP"
+    (let [allocs (r/capital-call-allocations lps-fixture 20000000)]
+      (is (every? :overcall? allocs)))))
+
+(deftest capital-call-allocations-account-for-prior-called-amount
+  (testing "an LP already near their commitment can be pushed over by a small additional call"
+    (let [lps [{:id "lp-1" :commitment-amount 5000000 :called-amount 4900000}
+               {:id "lp-2" :commitment-amount 1000000 :called-amount 0}]
+          allocs (r/capital-call-allocations lps 200000)
+          by-id (into {} (map (juxt :lp-id identity)) allocs)]
+      (is (:overcall? (get by-id "lp-1")) "lp-1: 4.9M + pro-rata share pushes past 5M commitment")
+      (is (not (:overcall? (get by-id "lp-2")))))))
+
+(deftest capital-call-allocations-validation-rules
+  (is (thrown? Exception (r/capital-call-allocations lps-fixture -1)))
+  (is (thrown? Exception (r/capital-call-allocations [] 1000)))
+  (is (thrown? Exception (r/capital-call-allocations [{:id "lp-1" :commitment-amount 0}] 1000))))
+
+(deftest capital-call-certificate-is-a-draft-not-a-real-call
+  (let [allocs (r/capital-call-allocations lps-fixture 2000000)
+        result (r/register-capital-call allocs 2000000 "USA" 0 "2026-07-06")]
+    (is (nil? (get-in result ["certificate" "proof"])))
+    (is (= (get-in result ["certificate" "issued_by_registry"]) false))
+    (is (= (get-in result ["certificate" "status"]) "draft-unsigned"))))
+
+(deftest capital-call-assigns-call-number
+  (let [allocs (r/capital-call-allocations lps-fixture 2000000)
+        result (r/register-capital-call allocs 2000000 "USA" 7 "2026-07-06")]
+    (is (= (get result "call_number") "USA-CALL-000007"))
+    (is (= (get-in result ["record" "immutable"]) true))
+    (is (= (get-in result ["record" "kind"]) "capital-call-draft"))
+    (is (= (get-in result ["record" "funding_due_days"]) r/default-notice-period-days))))
+
+(deftest capital-call-validation-rules
+  (let [allocs (r/capital-call-allocations lps-fixture 2000000)]
+    (is (thrown? Exception (r/register-capital-call [] 2000000 "USA" 0 "2026-07-06")))
+    (is (thrown? Exception (r/register-capital-call allocs -1 "USA" 0 "2026-07-06")))
+    (is (thrown? Exception (r/register-capital-call allocs 2000000 "" 0 "2026-07-06")))
+    (is (thrown? Exception (r/register-capital-call allocs 2000000 "USA" -1 "2026-07-06")))
+    (is (thrown? Exception (r/register-capital-call allocs 2000000 "USA" 0 nil)))))
+
+(deftest capital-call-history-is-append-only
+  (let [c1 (r/register-capital-call (r/capital-call-allocations lps-fixture 1000000) 1000000 "USA" 0 "2026-07-06")
+        hist (r/append [] c1)
+        c2 (r/register-capital-call (r/capital-call-allocations lps-fixture 500000) 500000 "USA" 1 "2026-08-06")
+        hist2 (r/append hist c2)]
+    (is (= 2 (count hist2)))
+    (is (= "USA-CALL-000000" (get-in hist2 [0 "record_id"])))
+    (is (= "USA-CALL-000001" (get-in hist2 [1 "record_id"])))))
+
 ;; ----------------------------- waterfall -----------------------------
 
 (deftest waterfall-returns-only-proceeds-below-contributed-capital

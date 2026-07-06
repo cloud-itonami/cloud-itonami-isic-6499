@@ -31,6 +31,7 @@
 - deal due-diligence checklist proposal against a named framework's
   spec-basis
 - AML/sanctions screening for LPs and portfolio-company parties
+- capital-call notice proposal, pro-rata by commitment share, overcall-blocked
 - Investment Committee capital-deployment proposal
 - exit-proceeds waterfall distribution proposal
 - immutable audit ledger
@@ -45,11 +46,12 @@
 
 ## Trust Controls
 
-- no capital is committed to a portfolio company and no exit distribution
-  is paid without Investment Committee (human) sign-off
-- a fabricated DD checklist, a sanctions hit, or a missing accredited-
-  investor affirmation forces a hold, not an override
+- no capital is called from LPs, committed to a portfolio company, or paid
+  out as an exit distribution without Investment Committee (human) sign-off
+- a fabricated DD checklist, a sanctions hit, a missing accredited-investor
+  affirmation, or a call that would overcall an LP past their commitment
+  forces a hold, not an override
 - LP personal/financial data and portfolio-company confidential data stay
   outside Git
-- every commitment/distribution path is auditable
+- every call/commitment/distribution path is auditable
 - emergency manual override paths remain outside LLM control

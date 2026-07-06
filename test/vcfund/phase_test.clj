@@ -1,9 +1,15 @@
 (ns vcfund.phase-test
   "The phase table as executable tests. The invariant this repo cannot
-  regress on: neither `:investment/commit` nor `:exit/distribute` may ever
-  be a member of any phase's `:auto` set."
+  regress on: none of `:capital-call/issue`, `:investment/commit` or
+  `:exit/distribute` may ever be a member of any phase's `:auto` set."
   (:require [clojure.test :refer [deftest is testing]]
             [vcfund.phase :as phase]))
+
+(deftest capital-call-issue-never-auto-at-any-phase
+  (testing "structural invariant: no phase auto-issues a capital call to LPs"
+    (doseq [[n {:keys [auto]}] phase/phases]
+      (is (not (contains? auto :capital-call/issue))
+          (str "phase " n " must not auto-commit :capital-call/issue")))))
 
 (deftest investment-commit-never-auto-at-any-phase
   (testing "structural invariant: no phase, now or in the future entries, auto-commits real capital deployment"
@@ -27,6 +33,7 @@
   (is (= :hold (:disposition (phase/gate 3 {:op :lp/intake} :hold)))))
 
 (deftest gate-escalates-a-clean-non-auto-write
+  (is (= :escalate (:disposition (phase/gate 3 {:op :capital-call/issue} :commit))))
   (is (= :escalate (:disposition (phase/gate 3 {:op :investment/commit} :commit))))
   (is (= :escalate (:disposition (phase/gate 3 {:op :exit/distribute} :commit)))))
 

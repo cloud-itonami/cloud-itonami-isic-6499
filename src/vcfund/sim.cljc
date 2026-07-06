@@ -1,11 +1,13 @@
 (ns vcfund.sim
   "Demo driver -- `clojure -M:dev:run`. Walks a clean LP + deal through
-  LP intake -> deal DD assessment -> KYC screening -> investment-commitment
+  LP intake -> deal DD assessment -> KYC screening -> capital-call proposal
+  (always escalates) -> human approval -> commit -> investment-commitment
   proposal (always escalates) -> human approval -> commit -> exit-
   distribution proposal (always escalates) -> human approval -> commit,
-  then shows two HARD holds (a sanctions hit and a fabricated jurisdiction)
-  that never reach a human at all, and prints the audit ledger + the draft
-  commitment/distribution records."
+  then shows three HARD holds (a sanctions hit, a fabricated jurisdiction,
+  and an overcalled capital call) that never reach a human at all, and
+  prints the audit ledger + the draft capital-call/commitment/distribution
+  records."
   (:require [langgraph.graph :as g]
             [vcfund.store :as store]
             [vcfund.operation :as op]))
@@ -33,6 +35,13 @@
     (println (exec! actor "t3" {:op :kyc/screen :subject "party-1"} operator))
     (println (approve! actor "t3"))
 
+    (println "== capital-call/issue deal-1 (call $2,000,000 pro-rata from LPs; always escalates -- actuation/call) ==")
+    (let [r (exec! actor "t3b" {:op :capital-call/issue :subject "deal-1"
+                               :call-amount 2000000 :notice-date "2026-07-06"} operator)]
+      (println r)
+      (println "-- human Investment Committee approves --")
+      (println (approve! actor "t3b")))
+
     (println "== investment/commit deal-1 (always escalates -- actuation/deploy) ==")
     (let [r (exec! actor "t4" {:op :investment/commit :subject "deal-1"} operator)]
       (println r)
@@ -52,8 +61,15 @@
     (println "== dd/assess deal-2 (ATL -- no spec-basis -> HARD hold) ==")
     (println (exec! actor "t7" {:op :dd/assess :subject "deal-2"} operator))
 
+    (println "== capital-call/issue deal-3 ($20,000,000 -- overcalls every LP -> HARD hold) ==")
+    (println (exec! actor "t8" {:op :capital-call/issue :subject "deal-3"
+                                :call-amount 20000000 :notice-date "2026-07-06"} operator))
+
     (println "== audit ledger ==")
     (doseq [f (store/ledger db)] (println f))
+
+    (println "== draft capital-call records ==")
+    (doseq [r (store/capital-call-history db)] (println r))
 
     (println "== draft investment-commitment records ==")
     (doseq [r (store/commitment-history db)] (println r))

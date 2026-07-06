@@ -2,9 +2,9 @@
 
 `cloud-itonami-isic-6499` is an OSS open-business blueprint for a venture
 capital fund (ISIC 6499's own-account-investment member) -- LP subscription
-intake, deal due diligence, Investment Committee capital deployment, and
-exit/distribution to LPs. Governance covers both the capability layer and
-the operator model.
+intake, deal due diligence, capital calls, Investment Committee capital
+deployment, and exit/distribution to LPs. Governance covers both the
+capability layer and the operator model.
 
 ## Maintainers
 
@@ -12,11 +12,11 @@ Maintainers may merge changes that preserve these invariants:
 
 - the InvestmentCommitteeGovernor remains independent of the advisor.
 - hard policy violations (fabricated spec-basis, sanctions hit, incomplete
-  DD, missing accredited-investor affirmation) cannot be overridden by
-  human approval.
-- committing fund capital into a portfolio company, or distributing exit
-  proceeds to LPs, always escalates to a human Investment Committee --
-  never automated.
+  DD, missing accredited-investor affirmation, an overcalled LP) cannot be
+  overridden by human approval.
+- calling capital in from LPs, committing fund capital into a portfolio
+  company, or distributing exit proceeds to LPs, always escalates to a
+  human Investment Committee -- never automated.
 - every hold, approval and disbursement path is auditable.
 - LP personal/financial data and portfolio-company confidential data stay
   outside Git.

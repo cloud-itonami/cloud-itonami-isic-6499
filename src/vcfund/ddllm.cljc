@@ -3,13 +3,13 @@
 
   It normalizes LP subscription intake, drafts a per-jurisdiction deal
   due-diligence checklist, screens LPs/founders against a KYC/sanctions
-  signal, and drafts the investment-commitment and exit-distribution
-  actions. CRITICAL: it is a smart-but-untrusted advisor. It returns a
-  *proposal* (with a rationale + the fields it cited), never a committed
-  record or a real capital movement. Every output is censored downstream
-  by `vcfund.governor` before anything touches the SSoT, and
-  `:investment/commit`/`:exit/distribute` proposals NEVER auto-commit at
-  any phase -- see README `Actuation`.
+  signal, and drafts the capital-call, investment-commitment and
+  exit-distribution actions. CRITICAL: it is a smart-but-untrusted advisor.
+  It returns a *proposal* (with a rationale + the fields it cited), never a
+  committed record or a real capital movement. Every output is censored
+  downstream by `vcfund.governor` before anything touches the SSoT, and
+  `:capital-call/issue`/`:investment/commit`/`:exit/distribute` proposals
+  NEVER auto-commit at any phase -- see README `Actuation`.
 
   Like `underwriting.underwriterllm`, this is a deterministic mock so the
   actor graph runs offline and the governor contract is exercised
@@ -21,12 +21,13 @@
      :rationale  str            ; why -- SCANNED by the spec-basis gate
      :cites      [kw|str ..]    ; facts/sources the LLM used -- SCANNED too
      :effect     kw             ; how a commit would mutate the SSoT
-     :stake      kw|nil         ; :actuation/deploy | :actuation/distribute | nil
+     :stake      kw|nil         ; :actuation/call | :actuation/deploy | :actuation/distribute | nil
      :confidence 0..1}"
   (:require #?(:clj  [clojure.edn :as edn]
                :cljs [cljs.reader :as edn])
             [clojure.string :as str]
             [vcfund.facts :as facts]
+            [vcfund.registry :as registry]
             [vcfund.store :as store]
             [langchain.model :as model]))
 
@@ -113,6 +114,37 @@
        :stake      nil
        :confidence 0.9})))
 
+(defn- propose-capital-call
+  "Draft the capital-call notice action -- drawing committed capital IN
+  from LPs, pro-rata by commitment share, to fund a deal. `:call-amount` is
+  a REAL external fact supplied by the caller (the deal's actual funding
+  need), never invented here; the pro-rata split itself is recomputed
+  independently by the governor from store data, never trusted from this
+  proposal. ALWAYS `:stake :actuation/call` -- a capital call is a
+  REAL-WORLD act (LPs become contractually obligated to wire funds), never
+  a draft the actor may auto-run. See README `Actuation`: no phase ever
+  adds this op to a phase's `:auto` set (`vcfund.phase`); the governor also
+  always escalates on `:actuation/call`. Two independent layers agree,
+  deliberately."
+  [db {:keys [subject call-amount notice-date]}]
+  (let [lps (store/all-lps db)
+        allocations (try (registry/capital-call-allocations lps call-amount)
+                         (catch #?(:clj Exception :cljs :default) _ []))
+        overcalled (filter :overcall? allocations)]
+    {:summary    (str subject " 向け資金化のためLP " (count lps) "者へキャピタルコール "
+                      call-amount " を発行提案"
+                      (when (seq overcalled) (str " (" (count overcalled) "件がコミットメント超過)")))
+     :rationale  (if (seq overcalled)
+                   "一部LPの累計コール額がコミットメント額を超過"
+                   "各LPのコミットメント比率に応じた按分配分")
+     :cites      (mapv :id lps)
+     :effect     :capital-call/mark-issued
+     :value      {:jurisdiction (:jurisdiction (store/deal db subject))
+                  :call-amount call-amount
+                  :notice-date notice-date}
+     :stake      :actuation/call
+     :confidence (if (seq overcalled) 0.3 0.9)}))
+
 (defn- propose-commit
   "Draft the actual investment-commitment action -- deploying real fund
   capital into a portfolio company. ALWAYS `:stake :actuation/deploy` --
@@ -166,6 +198,7 @@
     :lp/intake         (normalize-lp-intake db request)
     :dd/assess         (assess-dd db request)
     :kyc/screen        (screen-kyc db request)
+    :capital-call/issue (propose-capital-call db request)
     :investment/commit (propose-commit db request)
     :exit/distribute   (propose-distribute db request)
     {:summary "未対応の操作" :rationale (str op) :cites []
@@ -186,19 +219,21 @@
        "EDNだけを出力します。\n"
        "キー: :summary(人向けドラフト) :rationale(根拠/必ず事実から) "
        ":cites(使った事実キーのベクタ) "
-       ":effect(:lp/upsert|:assessment/set|:kyc/set|:investment/mark-committed|:distribution/mark-paid) "
-       ":stake(:actuation/deploy|:actuation/distribute|nil) :confidence(0..1)。\n"
+       ":effect(:lp/upsert|:assessment/set|:kyc/set|:capital-call/mark-issued|"
+       ":investment/mark-committed|:distribution/mark-paid) "
+       ":stake(:actuation/call|:actuation/deploy|:actuation/distribute|nil) :confidence(0..1)。\n"
        "重要: 登録されていない法域のfund-formation/exemption要件を絶対に創作してはいけません。"
        "spec-basisが無い場合は :cites を空にし confidence を上げないこと。"))
 
 (defn- facts-for [st {:keys [op subject]}]
   (case op
-    :dd/assess         {:deal (store/deal st subject)}
-    :kyc/screen        {:party (store/party st subject)}
-    :investment/commit {:deal (store/deal st subject)
-                        :assessment (store/assessment-of st subject)}
-    :exit/distribute   {:deal (store/deal st subject)
-                        :commitment (store/commitment-of st subject)}
+    :dd/assess          {:deal (store/deal st subject)}
+    :kyc/screen         {:party (store/party st subject)}
+    :capital-call/issue {:deal (store/deal st subject) :lps (store/all-lps st)}
+    :investment/commit  {:deal (store/deal st subject)
+                         :assessment (store/assessment-of st subject)}
+    :exit/distribute    {:deal (store/deal st subject)
+                         :commitment (store/commitment-of st subject)}
     {:deal (store/deal st subject)}))
 
 (defn- parse-proposal

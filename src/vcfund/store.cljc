@@ -16,12 +16,12 @@
   actor, the InvestmentCommitteeGovernor and the audit ledger never know
   which SSoT they run on.
 
-  The ledger stays append-only on every backend: 'who committed what
-  capital, to which deal, on what DD basis, approved by whom' (and
-  symmetrically for exit distributions) is always a query over an
-  immutable log -- the audit trail an LP trusting a GP with their capital
-  needs, and the evidence an operator needs if a commitment or distribution
-  is later disputed."
+  The ledger stays append-only on every backend: 'who called what capital
+  from which LPs, who committed what capital to which deal, on what DD
+  basis, approved by whom' (and symmetrically for exit distributions) is
+  always a query over an immutable log -- the audit trail an LP trusting a
+  GP with their capital needs, and the evidence an operator needs if a
+  call, commitment or distribution is later disputed."
   (:require #?(:clj  [clojure.edn :as edn]
                :cljs [cljs.reader :as edn])
             [vcfund.registry :as registry]
@@ -37,9 +37,11 @@
   (assessment-of [s deal-id] "committed DD-checklist assessment for a deal, or nil")
   (commitment-of [s deal-id] "committed investment-commitment record for a deal, or nil")
   (ledger [s])
+  (capital-call-history [s] "the append-only capital-call history (vcfund.registry drafts)")
   (commitment-history [s] "the append-only investment-commitment history (vcfund.registry drafts)")
   (distribution-history [s] "the append-only exit-distribution history (vcfund.registry drafts)")
   (next-sequence [s jurisdiction] "next commitment-number sequence for a jurisdiction")
+  (call-sequence [s jurisdiction] "next capital-call-number sequence for a jurisdiction")
   (commit-record! [s record] "apply a committed op's record to the SSoT")
   (append-ledger! [s fact]   "append one immutable decision fact")
   (with-lps [s lps] "replace/seed the LP directory (map id->lp)")
@@ -56,9 +58,9 @@
   []
   {:lps
    {"lp-1" {:id "lp-1" :name "Sequoia Fund of Funds" :commitment-amount 5000000
-            :currency "USD" :jurisdiction "USA" :accredited? true :status :active}
+            :called-amount 0 :currency "USD" :jurisdiction "USA" :accredited? true :status :active}
     "lp-2" {:id "lp-2" :name "個人LP 山田太郎" :commitment-amount 1000000
-            :currency "JPY" :jurisdiction "JPN" :accredited? true :status :active}}
+            :called-amount 0 :currency "JPY" :jurisdiction "JPN" :accredited? true :status :active}}
    :deals
    {"deal-1" {:id "deal-1" :portfolio-company "Acme AI, Inc." :founders ["party-1" "party-2"]
               :jurisdiction "USA" :ask-amount 2000000 :currency "USD"
@@ -75,6 +77,18 @@
     "party-3" {:id "party-3" :name "Sanctioned Founder" :role :founder :sanctions-hit? true :id-doc nil}}})
 
 ;; ----------------------------- shared commit/distribute logic -----------------------------
+
+(defn- issue-capital-call!
+  "Backend-agnostic `:capital-call/mark-issued` -- recomputes the pro-rata
+  allocation from the current LP directory (never trusts a caller-supplied
+  allocation), drafts the capital-call notice record, and returns
+  {:result .. :allocations ..} for the caller to persist (each LP's
+  `:called-amount` advances to its `:new-called-amount`)."
+  [s jurisdiction call-amount notice-date]
+  (let [allocations (registry/capital-call-allocations (all-lps s) call-amount)
+        seq-n (call-sequence s jurisdiction)
+        result (registry/register-capital-call allocations call-amount jurisdiction seq-n notice-date)]
+    {:result result :allocations allocations}))
 
 (defn- commit-investment!
   "Backend-agnostic `:investment/mark-committed` -- looks up the deal via
@@ -125,10 +139,13 @@
   (assessment-of [_ deal-id] (get-in @a [:assessments deal-id]))
   (commitment-of [_ deal-id] (get-in @a [:commitments deal-id]))
   (ledger [_] (:ledger @a))
+  (capital-call-history [_] (:capital-call-history @a))
   (commitment-history [_] (:commitment-history @a))
   (distribution-history [_] (:distribution-history @a))
   (next-sequence [_ jurisdiction]
     (get-in @a [:sequences jurisdiction] 0))
+  (call-sequence [_ jurisdiction]
+    (get-in @a [:call-sequences jurisdiction] 0))
   (commit-record! [s {:keys [effect path value payload]}]
     (case effect
       :lp/upsert
@@ -139,6 +156,19 @@
 
       :kyc/set
       (swap! a assoc-in [:kyc (first path)] payload)
+
+      :capital-call/mark-issued
+      (let [{:keys [jurisdiction call-amount notice-date]} payload
+            {:keys [result allocations]} (issue-capital-call! s jurisdiction call-amount notice-date)]
+        (swap! a (fn [state]
+                   (-> state
+                       (update-in [:call-sequences jurisdiction] (fnil inc 0))
+                       (update :lps (fn [lps]
+                                      (reduce (fn [m {:keys [lp-id new-called-amount]}]
+                                                (update m lp-id assoc :called-amount new-called-amount))
+                                              lps allocations)))
+                       (update :capital-call-history registry/append result))))
+        result)
 
       :investment/mark-committed
       (let [deal-id (first path)
@@ -170,8 +200,9 @@
   "A MemStore seeded with the demo LP/deal/party set. The deterministic default."
   []
   (->MemStore (atom (assoc (demo-data)
-                           :assessments {} :kyc {} :ledger [] :sequences {}
-                           :commitments {} :commitment-history [] :distribution-history []))))
+                           :assessments {} :kyc {} :ledger [] :sequences {} :call-sequences {}
+                           :commitments {} :commitment-history []
+                           :capital-call-history [] :distribution-history []))))
 
 ;; ----------------------------- DatomicStore (langchain.db) -----------------------------
 
@@ -188,28 +219,33 @@
    :assessment/deal-id {:db/unique :db.unique/identity}
    :commitment/deal-id {:db/unique :db.unique/identity}
    :ledger/seq        {:db/unique :db.unique/identity}
+   :capital-call-history/seq {:db/unique :db.unique/identity}
    :commitment-history/seq {:db/unique :db.unique/identity}
    :distribution-history/seq {:db/unique :db.unique/identity}
-   :sequence/jurisdiction {:db/unique :db.unique/identity}})
+   :sequence/jurisdiction {:db/unique :db.unique/identity}
+   :call-sequence/jurisdiction {:db/unique :db.unique/identity}})
 
 (defn- enc [v] (pr-str v))
 (defn- dec* [s] (when s (edn/read-string s)))
 
-(defn- lp->tx [{:keys [id name commitment-amount currency jurisdiction accredited? status]}]
+(defn- lp->tx [{:keys [id name commitment-amount called-amount currency jurisdiction accredited? status]}]
   (cond-> {:lp/id id}
     name              (assoc :lp/name name)
     commitment-amount (assoc :lp/commitment-amount commitment-amount)
+    (some? called-amount) (assoc :lp/called-amount called-amount)
     currency          (assoc :lp/currency currency)
     jurisdiction       (assoc :lp/jurisdiction jurisdiction)
     (some? accredited?) (assoc :lp/accredited? accredited?)
     status            (assoc :lp/status status)))
 
 (def ^:private lp-pull
-  [:lp/id :lp/name :lp/commitment-amount :lp/currency :lp/jurisdiction :lp/accredited? :lp/status])
+  [:lp/id :lp/name :lp/commitment-amount :lp/called-amount :lp/currency :lp/jurisdiction
+   :lp/accredited? :lp/status])
 
 (defn- pull->lp [m]
   (when (:lp/id m)
     {:id (:lp/id m) :name (:lp/name m) :commitment-amount (:lp/commitment-amount m)
+     :called-amount (or (:lp/called-amount m) 0)
      :currency (:lp/currency m) :jurisdiction (:lp/jurisdiction m)
      :accredited? (boolean (:lp/accredited? m)) :status (:lp/status m)}))
 
@@ -283,6 +319,10 @@
     (->> (d/q '[:find ?s ?f :where [?e :ledger/seq ?s] [?e :ledger/fact ?f]] (d/db conn))
          (sort-by first)
          (mapv (comp dec* second))))
+  (capital-call-history [_]
+    (->> (d/q '[:find ?s ?r :where [?e :capital-call-history/seq ?s] [?e :capital-call-history/record ?r]] (d/db conn))
+         (sort-by first)
+         (mapv (comp dec* second))))
   (commitment-history [_]
     (->> (d/q '[:find ?s ?r :where [?e :commitment-history/seq ?s] [?e :commitment-history/record ?r]] (d/db conn))
          (sort-by first)
@@ -296,6 +336,11 @@
               :where [?e :sequence/jurisdiction ?j] [?e :sequence/next ?n]]
             (d/db conn) jurisdiction)
         0))
+  (call-sequence [_ jurisdiction]
+    (or (d/q '[:find ?n . :in $ ?j
+              :where [?e :call-sequence/jurisdiction ?j] [?e :call-sequence/next ?n]]
+            (d/db conn) jurisdiction)
+        0))
   (commit-record! [s {:keys [effect path value payload]}]
     (case effect
       :lp/upsert
@@ -306,6 +351,19 @@
 
       :kyc/set
       (d/transact! conn [{:kyc/party-id (first path) :kyc/payload (enc payload)}])
+
+      :capital-call/mark-issued
+      (let [{:keys [jurisdiction call-amount notice-date]} payload
+            {:keys [result allocations]} (issue-capital-call! s jurisdiction call-amount notice-date)
+            next-n (inc (call-sequence s jurisdiction))]
+        (d/transact! conn
+                     (into [{:call-sequence/jurisdiction jurisdiction :call-sequence/next next-n}
+                            {:capital-call-history/seq (count (capital-call-history s))
+                             :capital-call-history/record (enc (get result "record"))}]
+                           (map (fn [{:keys [lp-id new-called-amount]}]
+                                  {:lp/id lp-id :lp/called-amount new-called-amount}))
+                           allocations))
+        result)
 
       :investment/mark-committed
       (let [deal-id (first path)

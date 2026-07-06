@@ -17,6 +17,7 @@
       (is (= "USA" (:jurisdiction (store/deal s "deal-1"))))
       (is (= :safe (:security-type (store/deal s "deal-1"))))
       (is (true? (:accredited? (store/lp s "lp-1"))))
+      (is (zero? (:called-amount (store/lp s "lp-1"))))
       (is (= "Jane Founder" (:name (store/party s "party-1"))))
       (is (false? (:sanctions-hit? (store/party s "party-1"))))
       (is (true? (:sanctions-hit? (store/party s "party-3"))))
@@ -26,9 +27,11 @@
       (is (nil? (store/assessment-of s "deal-1")))
       (is (nil? (store/commitment-of s "deal-1")))
       (is (= [] (store/ledger s)))
+      (is (= [] (store/capital-call-history s)))
       (is (= [] (store/commitment-history s)))
       (is (= [] (store/distribution-history s)))
-      (is (zero? (store/next-sequence s "USA"))))))
+      (is (zero? (store/next-sequence s "USA")))
+      (is (zero? (store/call-sequence s "USA"))))))
 
 (deftest write-and-ledger-parity
   (doseq [[label s] (backends)]
@@ -45,6 +48,15 @@
         (store/commit-record! s {:effect :kyc/set :path ["party-1"]
                                  :payload {:party-id "party-1" :verdict :clear}})
         (is (= {:party-id "party-1" :verdict :clear} (store/kyc-of s "party-1"))))
+      (testing "capital call drafts a call record, advances LP called-amounts and the call sequence"
+        (store/commit-record! s {:effect :capital-call/mark-issued :path ["deal-1"]
+                                 :payload {:jurisdiction "USA" :call-amount 2000000 :notice-date "2026-07-06"}})
+        (is (= "USA-CALL-000000" (get (first (store/capital-call-history s)) "record_id")))
+        (is (= "capital-call-draft" (get (first (store/capital-call-history s)) "kind")))
+        (is (= 1 (count (store/capital-call-history s))))
+        (is (= 1 (store/call-sequence s "USA")))
+        (is (pos? (:called-amount (store/lp s "lp-1"))))
+        (is (pos? (:called-amount (store/lp s "lp-2")))))
       (testing "commit drafts an investment-commitment record and advances the sequence"
         (store/commit-record! s {:effect :investment/mark-committed :path ["deal-1"]})
         ;; commitment-history holds the inner "record" sub-map (registry/append's
@@ -70,8 +82,10 @@
     (is (nil? (store/deal s "nope")))
     (is (= [] (store/all-deals s)))
     (is (= [] (store/ledger s)))
+    (is (= [] (store/capital-call-history s)))
     (is (= [] (store/commitment-history s)))
     (is (zero? (store/next-sequence s "USA")))
+    (is (zero? (store/call-sequence s "USA")))
     (store/with-deals s {"x" {:id "x" :portfolio-company "X Inc" :jurisdiction "USA"
                               :founders [] :ask-amount 0 :currency "USD"
                               :security-type :safe :status :sourced}})

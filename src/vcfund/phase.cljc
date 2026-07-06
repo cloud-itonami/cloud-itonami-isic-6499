@@ -17,24 +17,26 @@
                                  KYC screening still escalate (a human
                                  should see a deal/party determination
                                  before it becomes the basis for a capital
-                                 commitment).
+                                 call or commitment).
 
+  `:capital-call/issue` (drawing real committed capital in from LPs),
   `:investment/commit` (deploying real fund capital) and
   `:exit/distribute` (returning real proceeds to LPs) are deliberately
   ABSENT from every phase's `:auto` set, including phase 3 -- this is a
   permanent structural fact about this table, not a rollout milestone still
-  to come. Both directions of real capital movement are always a human
-  Investment Committee call; see README `Actuation`. The
-  InvestmentCommitteeGovernor's `:actuation/deploy`/`:actuation/distribute`
-  high-stakes gate (`vcfund.governor`) enforces the same invariant
-  independently -- two layers, not one, agree on this.")
+  to come. All three directions of real capital movement are always a
+  human Investment Committee call; see README `Actuation`. The
+  InvestmentCommitteeGovernor's `:actuation/call`/`:actuation/deploy`/
+  `:actuation/distribute` high-stakes gate (`vcfund.governor`) enforces the
+  same invariant independently -- two layers, not one, agree on this.")
 
 (def read-ops  #{:coverage/report})
-(def write-ops #{:lp/intake :kyc/screen :dd/assess :investment/commit :exit/distribute})
+(def write-ops #{:lp/intake :kyc/screen :dd/assess :capital-call/issue :investment/commit :exit/distribute})
 
-;; NOTE the invariant: `:investment/commit` and `:exit/distribute` are
-;; members of `write-ops` (governor-gated like any write) but are NEVER
-;; members of any phase's `:auto` set below. Do not add them there.
+;; NOTE the invariant: `:capital-call/issue`, `:investment/commit` and
+;; `:exit/distribute` are members of `write-ops` (governor-gated like any
+;; write) but are NEVER members of any phase's `:auto` set below. Do not
+;; add them there.
 (def phases
   "phase -> {:label .. :writes <ops allowed to write> :auto <ops allowed to
   auto-commit when governor-clean>}."
@@ -54,9 +56,9 @@
   - a write op not yet enabled in this phase -> HOLD (:phase-disabled).
   - a write op enabled but not auto-eligible -> ESCALATE (:phase-approval),
     even if the governor was clean.
-  - `:investment/commit`/`:exit/distribute` are never auto-eligible at any
-    phase, so they always escalate once the governor clears them (or hold
-    if the governor doesn't)."
+  - `:capital-call/issue`/`:investment/commit`/`:exit/distribute` are never
+    auto-eligible at any phase, so they always escalate once the governor
+    clears them (or hold if the governor doesn't)."
   [phase {:keys [op]} governor-disposition]
   (let [{:keys [writes auto]} (get phases phase (get phases default-phase))]
     (cond
