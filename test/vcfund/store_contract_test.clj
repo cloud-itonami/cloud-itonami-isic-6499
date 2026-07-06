@@ -30,6 +30,7 @@
       (is (= [] (store/capital-call-history s)))
       (is (= [] (store/commitment-history s)))
       (is (= [] (store/distribution-history s)))
+      (is (= [] (store/portfolio-reports-of s "deal-1")))
       (is (zero? (store/next-sequence s "USA")))
       (is (zero? (store/call-sequence s "USA"))))))
 
@@ -48,6 +49,10 @@
         (store/commit-record! s {:effect :kyc/set :path ["party-1"]
                                  :payload {:party-id "party-1" :verdict :clear}})
         (is (= {:party-id "party-1" :verdict :clear} (store/kyc-of s "party-1"))))
+      (testing "advance-stage moves a deal through the pipeline funnel"
+        (store/commit-record! s {:effect :deal/advance-stage :path ["deal-1"]
+                                 :payload {:to-stage :ic-review}})
+        (is (= :ic-review (:status (store/deal s "deal-1")))))
       (testing "capital call drafts a call record, advances LP called-amounts and the call sequence"
         (store/commit-record! s {:effect :capital-call/mark-issued :path ["deal-1"]
                                  :payload {:jurisdiction "USA" :call-amount 2000000 :notice-date "2026-07-06"}})
@@ -66,6 +71,11 @@
         (is (= :committed (:status (store/deal s "deal-1"))))
         (is (= 1 (count (store/commitment-history s))))
         (is (= 1 (store/next-sequence s "USA"))))
+      (testing "portfolio report logs a KPI record for the now-committed deal"
+        (store/commit-record! s {:effect :portfolio/report-logged :path ["deal-1"]
+                                 :payload {:period "2026-Q3" :kpis {:revenue 450000}}})
+        (is (= 1 (count (store/portfolio-reports-of s "deal-1"))))
+        (is (= "portfolio-report" (get (first (store/portfolio-reports-of s "deal-1")) "kind"))))
       (testing "distribute drafts an exit-distribution record from the committed investment"
         (store/commit-record! s {:effect :distribution/mark-paid :path ["deal-1"]
                                  :payload {:exit-proceeds 12000000 :holding-period-years 3}})

@@ -8,17 +8,22 @@
   UnderwritingGovernor, `cloud-itonami-M6910`'s RegistrarGovernor and
   `cloud-itonami-L6810`'s RealtorGovernor.
 
-  Six checks, in priority order. The first five are HARD violations: a
+  Nine checks, in priority order. The first eight are HARD violations: a
   human approver CANNOT override them (you don't get to approve your way
   past a sanctions hit, a fabricated fund-formation spec-basis, incomplete
-  DD, an LP missing an accredited-investor affirmation, or a capital call
-  that would overcall an LP past their commitment). The last is SOFT: it
-  asks a human to look (low confidence / actuation), and the human may
-  approve -- but see `vcfund.phase`: for `:capital-call/issue`,
-  `:investment/commit` and `:exit/distribute` (real capital movement, in
-  any of the three directions) NO phase ever allows auto-commit either.
-  Two independent layers agree that all three directions of actuation are
-  always a human call.
+  DD, an LP missing an accredited-investor affirmation, a capital call
+  that would overcall an LP past their commitment, an illegal pipeline-
+  stage transition, a commit attempted before Investment Committee review,
+  or a portfolio report on a deal that was never actually committed). The
+  last is SOFT: it asks a human to look (low confidence / actuation), and
+  the human may approve -- but see `vcfund.phase`: for
+  `:capital-call/issue`, `:investment/commit` and `:exit/distribute` (real
+  capital movement, in any of the three directions) NO phase ever allows
+  auto-commit either. Two independent layers agree that all three
+  directions of actuation are always a human call. `:deal/advance-stage`
+  and `:portfolio/report` are NOT actuation (no capital moves) and so are
+  NOT high-stakes -- they may auto-commit when clean, a deliberately
+  lighter-touch posture matching their actual (low) risk.
 
     1. Spec-basis        -- did the DD proposal cite an OFFICIAL
                              fund-formation/exemption source
@@ -27,23 +32,37 @@
                              sanctions/PEP hit (screened or on file)?
     3. DD incomplete      -- for an investment commitment, is the deal's
                              required DD checklist actually satisfied?
-    4. Accredited investor -- for a capital call or investment commitment,
+    4. Stage insufficient -- for an investment commitment, has the deal
+                             actually reached `:ic-review` in the pipeline
+                             funnel (`vcfund.pipeline`)? DD data being on
+                             file isn't enough if the deal was never
+                             formally taken to Investment Committee review.
+    5. Stage transition   -- for `:deal/advance-stage`, is `from`->`to` a
+                             legal forward move (`vcfund.pipeline/valid-
+                             transition?`), never skipping into
+                             `:committed`/`:exited` directly?
+    6. Accredited investor -- for a capital call or investment commitment,
                              does every LP in the fund have a recorded
                              accredited-investor/QP affirmation? (fund-wide:
                              the whole vehicle's exemption depends on every
                              investor qualifying, not just the one deal.)
-    5. Capital-call overcall -- does the requested call amount, allocated
+    7. Capital-call overcall -- does the requested call amount, allocated
                              pro-rata by commitment share
                              (`vcfund.registry/capital-call-allocations`),
                              push any LP's cumulative called amount past
                              their commitment? Recomputed independently
                              from store data -- never trust the advisor's
                              self-reported allocation.
-    6. Confidence floor / actuation gate -- LLM confidence below threshold,
+    8. Portfolio report requires commitment -- for `:portfolio/report`, is
+                             the deal actually `:committed`/`:exited`? A
+                             board-report/KPI record on a deal the fund
+                             never invested in is fabricated monitoring.
+    9. Confidence floor / actuation gate -- LLM confidence below threshold,
                              OR the op is `:capital-call/issue`,
                              `:investment/commit` or `:exit/distribute` ->
                              escalate."
   (:require [vcfund.facts :as facts]
+            [vcfund.pipeline :as pipeline]
             [vcfund.registry :as registry]
             [vcfund.store :as store]))
 
@@ -99,6 +118,42 @@
         [{:rule :dd-incomplete
           :detail "案件の必要DD書類が充足していない状態での投資実行提案"}]))))
 
+(defn- stage-insufficient-violations
+  "For `:investment/commit`, the deal must have actually progressed
+  through the pipeline funnel to at least `:ic-review` -- DD checklist
+  data being on file (checked separately by `dd-incomplete-violations`)
+  isn't enough if the deal was never formally taken to Investment
+  Committee review as a pipeline stage."
+  [{:keys [op subject]} st]
+  (when (= op :investment/commit)
+    (let [d (store/deal st subject)]
+      (when-not (pipeline/at-least? (:status d) :ic-review)
+        [{:rule :stage-insufficient
+          :detail "案件がInvestment Committeeレビュー段階に到達していない状態での投資実行提案"}]))))
+
+(defn- stage-transition-violations
+  "For `:deal/advance-stage`, the transition must be a legal forward move
+  (`vcfund.pipeline/valid-transition?`) -- never skip stages backward,
+  never jump straight into `:committed`/`:exited` (those are set only by
+  the real capital-moving ops)."
+  [{:keys [op subject to-stage]} st]
+  (when (= op :deal/advance-stage)
+    (let [d (store/deal st subject)]
+      (when-not (pipeline/valid-transition? (:status d) to-stage)
+        [{:rule :invalid-stage-transition
+          :detail (str (:status d) " から " to-stage " への遷移は許可されていない")}]))))
+
+(defn- portfolio-report-requires-commitment-violations
+  "For `:portfolio/report`, the deal must actually be `:committed` or
+  `:exited` -- a board-report/KPI record on a deal the fund never invested
+  in would be fabricated monitoring, not real portfolio oversight."
+  [{:keys [op subject]} st]
+  (when (= op :portfolio/report)
+    (let [status (:status (store/deal st subject))]
+      (when-not (contains? #{:committed :exited} status)
+        [{:rule :portfolio-report-without-commitment
+          :detail "投資実行(commit)されていない案件へのポートフォリオレポート提案"}]))))
+
 (defn- accredited-investor-violations
   "For a capital call or an investment commitment, EVERY LP in the fund
   must have a recorded accredited-investor/qualified-purchaser affirmation
@@ -151,8 +206,11 @@
                    (concat (spec-basis-violations request proposal)
                            (sanctions-violations request proposal st)
                            (dd-incomplete-violations request st)
+                           (stage-insufficient-violations request st)
+                           (stage-transition-violations request st)
                            (accredited-investor-violations request st)
                            (overcall-violations request st)
+                           (portfolio-report-requires-commitment-violations request st)
                            (commitment-missing-violations request st)))
         conf (:confidence proposal 0.0)
         low? (< conf confidence-floor)

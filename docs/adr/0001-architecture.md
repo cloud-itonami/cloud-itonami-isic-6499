@@ -204,3 +204,56 @@ this addendum, tracked in README's "Business-process coverage" table):
 deal pipeline/sourcing-funnel management, term-sheet/cap-table/valuation
 math, portfolio-company monitoring between commit and exit, whole-fund
 NAV/European waterfall, tax/regulatory reporting.
+
+## Addendum 2 (2026-07-06, same day): pipeline, portfolio monitoring, cap-table math
+
+A second honest coverage pass closed three more of the gaps the first
+addendum left open:
+
+- **`vcfund.pipeline`** (new, pure) -- a deal sourcing funnel (`:sourced
+  :screening :pitched :term-sheet :dd :ic-review`), forward-only
+  transitions (`valid-transition?`), with `:passed` reachable from any
+  pre-commitment stage and `:committed`/`:exited` reachable ONLY via the
+  real capital-moving ops, never via the new `:deal/advance-stage` op
+  directly -- this keeps pipeline stage and capital status from ever
+  diverging.
+- **New HARD check, `stage-transition-violations`** -- for
+  `:deal/advance-stage`, re-validates the proposed move independently
+  against `vcfund.pipeline/valid-transition?`.
+- **New HARD check, `stage-insufficient-violations`** -- for
+  `:investment/commit`, requires the deal to have actually reached
+  `:ic-review` in the funnel, not merely that DD checklist data happens to
+  be on file (`dd-incomplete-violations` and this check are independent:
+  DD-complete-but-never-reviewed and reviewed-but-DD-incomplete are both
+  correctly caught).
+- **`:portfolio/report`** (new op) -- board-report-style KPI logging for an
+  already-committed deal (`vcfund.registry/register-portfolio-report`,
+  append-only per-deal history via `store/portfolio-reports-of`). New HARD
+  check `portfolio-report-requires-commitment-violations` blocks reporting
+  on a deal the fund never actually invested in.
+- **`:deal/advance-stage` and `:portfolio/report` are deliberately NOT
+  `high-stakes`** -- neither moves capital, so both are phase-3
+  auto-eligible (added to `vcfund.phase`'s `:auto` set alongside
+  `:lp/intake`), a genuinely lighter governance posture matching their
+  actual (low) risk rather than applying maximum friction uniformly
+  everywhere. `:capital-call/issue`/`:investment/commit`/`:exit/distribute`
+  remain the only ops that always escalate.
+- **`vcfund.captable`** (new, pure) -- SAFE-conversion math (converts at
+  whichever of valuation-cap/discount is more favorable to the SAFE
+  holder) and priced-round ownership/dilution math, in PERCENTAGE-OF-
+  COMPANY terms only. Deliberately a standalone calculator, not a governed
+  op or a field wired into deal records: setting/negotiating a valuation
+  is advisory, not a capital-movement event, so it doesn't need
+  `vcfund.governor` gating the way the six governed ops do. Honestly does
+  NOT model absolute share counts, option-pool sizing, or multi-SAFE
+  proration -- see its docstring.
+
+Consequences: `test/vcfund/*` grew from 45 tests/219 assertions to 60
+tests/278 assertions (new `pipeline_test.clj`/`captable_test.clj` plus
+governor/store/phase additions), still lint-clean. Remaining honest gaps
+(tracked in README's "Business-process coverage" table): whole-fund NAV,
+term-sheet negotiation workflow, absolute cap-table/option-pool modeling,
+a dedicated follow-on-investment op (currently: source a new deal record
+for the follow-on round and run it through the same lifecycle), board-seat/
+governance-rights administration, whole-fund European waterfall, tax/
+regulatory reporting.

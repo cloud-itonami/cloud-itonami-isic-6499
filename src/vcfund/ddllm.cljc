@@ -27,6 +27,7 @@
                :cljs [cljs.reader :as edn])
             [clojure.string :as str]
             [vcfund.facts :as facts]
+            [vcfund.pipeline :as pipeline]
             [vcfund.registry :as registry]
             [vcfund.store :as store]
             [langchain.model :as model]))
@@ -114,6 +115,46 @@
        :stake      nil
        :confidence 0.9})))
 
+(defn- propose-advance-stage
+  "Draft a pipeline-stage advance -- moving a deal through the sourcing
+  funnel (`vcfund.pipeline`) BEFORE any capital moves. The LLM only
+  proposes the move; `vcfund.governor`'s `stage-transition-violations`
+  independently re-validates it against `vcfund.pipeline/valid-
+  transition?` (never trust the advisor's self-check alone). No capital
+  moves here, so `:stake` is nil -- not actuation."
+  [db {:keys [subject to-stage]}]
+  (let [d (store/deal db subject)
+        legal? (pipeline/valid-transition? (:status d) to-stage)]
+    {:summary    (str subject ": " (:status d) " -> " to-stage
+                      (when-not legal? " (不正な遷移)"))
+     :rationale  (if legal?
+                   "パイプライン上の前進移動"
+                   "現在stageから許可されていない遷移")
+     :cites      [(:status d)]
+     :effect     :deal/advance-stage
+     :value      {:deal-id subject :to-stage to-stage}
+     :stake      nil
+     :confidence (if legal? 0.9 0.2)}))
+
+(defn- propose-portfolio-report
+  "Draft a portfolio-monitoring KPI report for an already-committed deal --
+  board-reporting-style facts (`:kpis`) supplied by the caller from the
+  actual board deck/data room, never invented here. No capital moves here,
+  so `:stake` is nil -- not actuation."
+  [db {:keys [subject period kpis]}]
+  (let [d (store/deal db subject)
+        committed? (contains? #{:committed :exited} (:status d))]
+    {:summary    (str subject " (" period ") のポートフォリオレポート提案"
+                      (when-not committed? " (commit未実行)"))
+     :rationale  (if committed?
+                   "committed dealへの正規のKPIレポート"
+                   "投資実行されていない案件へのレポートは不可")
+     :cites      (vec (keys kpis))
+     :effect     :portfolio/report-logged
+     :value      {:deal-id subject :period period :kpis kpis}
+     :stake      nil
+     :confidence (if committed? 0.9 0.2)}))
+
 (defn- propose-capital-call
   "Draft the capital-call notice action -- drawing committed capital IN
   from LPs, pro-rata by commitment share, to fund a deal. `:call-amount` is
@@ -195,12 +236,14 @@
   request: {:op kw :subject id ...op-specific...}"
   [db {:keys [op] :as request}]
   (case op
-    :lp/intake         (normalize-lp-intake db request)
-    :dd/assess         (assess-dd db request)
-    :kyc/screen        (screen-kyc db request)
+    :lp/intake          (normalize-lp-intake db request)
+    :dd/assess          (assess-dd db request)
+    :kyc/screen         (screen-kyc db request)
+    :deal/advance-stage (propose-advance-stage db request)
     :capital-call/issue (propose-capital-call db request)
-    :investment/commit (propose-commit db request)
-    :exit/distribute   (propose-distribute db request)
+    :investment/commit  (propose-commit db request)
+    :portfolio/report   (propose-portfolio-report db request)
+    :exit/distribute    (propose-distribute db request)
     {:summary "未対応の操作" :rationale (str op) :cites []
      :effect :noop :stake nil :confidence 0.0}))
 
@@ -219,8 +262,9 @@
        "EDNだけを出力します。\n"
        "キー: :summary(人向けドラフト) :rationale(根拠/必ず事実から) "
        ":cites(使った事実キーのベクタ) "
-       ":effect(:lp/upsert|:assessment/set|:kyc/set|:capital-call/mark-issued|"
-       ":investment/mark-committed|:distribution/mark-paid) "
+       ":effect(:lp/upsert|:assessment/set|:kyc/set|:deal/advance-stage|"
+       ":capital-call/mark-issued|:investment/mark-committed|"
+       ":portfolio/report-logged|:distribution/mark-paid) "
        ":stake(:actuation/call|:actuation/deploy|:actuation/distribute|nil) :confidence(0..1)。\n"
        "重要: 登録されていない法域のfund-formation/exemption要件を絶対に創作してはいけません。"
        "spec-basisが無い場合は :cites を空にし confidence を上げないこと。"))
@@ -229,9 +273,11 @@
   (case op
     :dd/assess          {:deal (store/deal st subject)}
     :kyc/screen         {:party (store/party st subject)}
+    :deal/advance-stage {:deal (store/deal st subject)}
     :capital-call/issue {:deal (store/deal st subject) :lps (store/all-lps st)}
     :investment/commit  {:deal (store/deal st subject)
                          :assessment (store/assessment-of st subject)}
+    :portfolio/report   {:deal (store/deal st subject)}
     :exit/distribute    {:deal (store/deal st subject)
                          :commitment (store/commitment-of st subject)}
     {:deal (store/deal st subject)}))

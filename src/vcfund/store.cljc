@@ -40,6 +40,7 @@
   (capital-call-history [s] "the append-only capital-call history (vcfund.registry drafts)")
   (commitment-history [s] "the append-only investment-commitment history (vcfund.registry drafts)")
   (distribution-history [s] "the append-only exit-distribution history (vcfund.registry drafts)")
+  (portfolio-reports-of [s deal-id] "the append-only KPI-report history for one deal, oldest first")
   (next-sequence [s jurisdiction] "next commitment-number sequence for a jurisdiction")
   (call-sequence [s jurisdiction] "next capital-call-number sequence for a jurisdiction")
   (commit-record! [s record] "apply a committed op's record to the SSoT")
@@ -142,6 +143,7 @@
   (capital-call-history [_] (:capital-call-history @a))
   (commitment-history [_] (:commitment-history @a))
   (distribution-history [_] (:distribution-history @a))
+  (portfolio-reports-of [_ deal-id] (get-in @a [:portfolio-reports deal-id] []))
   (next-sequence [_ jurisdiction]
     (get-in @a [:sequences jurisdiction] 0))
   (call-sequence [_ jurisdiction]
@@ -156,6 +158,16 @@
 
       :kyc/set
       (swap! a assoc-in [:kyc (first path)] payload)
+
+      :deal/advance-stage
+      (swap! a assoc-in [:deals (first path) :status] (:to-stage payload))
+
+      :portfolio/report-logged
+      (let [deal-id (first path)
+            {:keys [period kpis]} payload
+            result (registry/register-portfolio-report deal-id period kpis)]
+        (swap! a update-in [:portfolio-reports deal-id] (fnil registry/append []) result)
+        result)
 
       :capital-call/mark-issued
       (let [{:keys [jurisdiction call-amount notice-date]} payload
@@ -202,7 +214,8 @@
   (->MemStore (atom (assoc (demo-data)
                            :assessments {} :kyc {} :ledger [] :sequences {} :call-sequences {}
                            :commitments {} :commitment-history []
-                           :capital-call-history [] :distribution-history []))))
+                           :capital-call-history [] :distribution-history []
+                           :portfolio-reports {}))))
 
 ;; ----------------------------- DatomicStore (langchain.db) -----------------------------
 
@@ -223,10 +236,19 @@
    :commitment-history/seq {:db/unique :db.unique/identity}
    :distribution-history/seq {:db/unique :db.unique/identity}
    :sequence/jurisdiction {:db/unique :db.unique/identity}
-   :call-sequence/jurisdiction {:db/unique :db.unique/identity}})
+   :call-sequence/jurisdiction {:db/unique :db.unique/identity}
+   :portfolio-report/seq {:db/unique :db.unique/identity}})
 
 (defn- enc [v] (pr-str v))
 (defn- dec* [s] (when s (edn/read-string s)))
+
+(defn- portfolio-report-count
+  "Global count of portfolio-report entities across ALL deals -- used as
+  the next `:portfolio-report/seq` (a single global counter, the same
+  convention `:ledger/seq` uses, since `:portfolio-report/seq` must be
+  globally unique, not merely unique per deal)."
+  [conn]
+  (count (d/q '[:find [?s ...] :where [?e :portfolio-report/seq ?s]] (d/db conn))))
 
 (defn- lp->tx [{:keys [id name commitment-amount called-amount currency jurisdiction accredited? status]}]
   (cond-> {:lp/id id}
@@ -331,6 +353,14 @@
     (->> (d/q '[:find ?s ?r :where [?e :distribution-history/seq ?s] [?e :distribution-history/record ?r]] (d/db conn))
          (sort-by first)
          (mapv (comp dec* second))))
+  (portfolio-reports-of [_ deal-id]
+    (->> (d/q '[:find ?s ?r :in $ ?did
+               :where [?e :portfolio-report/deal-id ?did]
+                      [?e :portfolio-report/seq ?s]
+                      [?e :portfolio-report/record ?r]]
+              (d/db conn) deal-id)
+         (sort-by first)
+         (mapv (comp dec* second))))
   (next-sequence [_ jurisdiction]
     (or (d/q '[:find ?n . :in $ ?j
               :where [?e :sequence/jurisdiction ?j] [?e :sequence/next ?n]]
@@ -351,6 +381,18 @@
 
       :kyc/set
       (d/transact! conn [{:kyc/party-id (first path) :kyc/payload (enc payload)}])
+
+      :deal/advance-stage
+      (d/transact! conn [{:deal/id (first path) :deal/status (enc (:to-stage payload))}])
+
+      :portfolio/report-logged
+      (let [deal-id (first path)
+            {:keys [period kpis]} payload
+            result (registry/register-portfolio-report deal-id period kpis)]
+        (d/transact! conn [{:portfolio-report/seq (portfolio-report-count conn)
+                           :portfolio-report/deal-id deal-id
+                           :portfolio-report/record (enc (get result "record"))}])
+        result)
 
       :capital-call/mark-issued
       (let [{:keys [jurisdiction call-amount notice-date]} payload

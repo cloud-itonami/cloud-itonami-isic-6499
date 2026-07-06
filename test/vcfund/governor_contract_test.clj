@@ -6,8 +6,9 @@
     DD-LLM never calls, commits or distributes capital the
     InvestmentCommitteeGovernor would reject, `:capital-call/issue`,
     `:investment/commit` and `:exit/distribute` NEVER auto-commit at any
-    phase, and every decision (commit OR hold) leaves exactly one ledger
-    fact."
+    phase, `:deal/advance-stage`/`:portfolio/report` (no capital risk) MAY
+    auto-commit when clean, and every decision (commit OR hold) leaves
+    exactly one ledger fact."
   (:require [clojure.test :refer [deftest is testing]]
             [langgraph.graph :as g]
             [vcfund.store :as store]
@@ -82,6 +83,60 @@
         (is (some #{:accredited-investor-violation} (-> (store/ledger db) last :basis)))
         (is (nil? (store/commitment-of db "deal-1")))))))
 
+(deftest deal-advance-stage-auto-commits-clean-transition
+  (testing "no capital risk -- a legal forward pipeline move auto-commits, no approval needed"
+    (let [[db actor] (fresh)
+          res (exec-op actor "t20" {:op :deal/advance-stage :subject "deal-1" :to-stage :screening} operator)]
+      (is (= :commit (get-in res [:state :disposition])))
+      (is (not= :interrupted (:status res)))
+      (is (= :screening (:status (store/deal db "deal-1")))))))
+
+(deftest deal-advance-stage-illegal-transition-is-held
+  (testing "skipping straight to :committed via advance-stage (not the real commit op) -> HARD hold"
+    (let [[db actor] (fresh)
+          res (exec-op actor "t21" {:op :deal/advance-stage :subject "deal-1" :to-stage :committed} operator)]
+      (is (= :hold (get-in res [:state :disposition])))
+      (is (some #{:invalid-stage-transition} (-> (store/ledger db) first :basis)))
+      (is (= :sourced (:status (store/deal db "deal-1"))) "stage unchanged on hold"))))
+
+(deftest commit-without-ic-review-stage-is-held
+  (testing "DD-cleared and KYC-cleared, but the deal never reached :ic-review -> HARD hold (stage-insufficient)"
+    (let [[db actor] (fresh)]
+      (exec-op actor "t22a" {:op :dd/assess :subject "deal-1"} operator)
+      (approve! actor "t22a")
+      (exec-op actor "t22b" {:op :kyc/screen :subject "party-1"} operator)
+      (approve! actor "t22b")
+      ;; deliberately no :deal/advance-stage -- deal-1 is still :sourced
+      (let [res (exec-op actor "t22" {:op :investment/commit :subject "deal-1"} operator)]
+        (is (= :hold (get-in res [:state :disposition])))
+        (is (some #{:stage-insufficient} (-> (store/ledger db) last :basis)))
+        (is (nil? (store/commitment-of db "deal-1")))))))
+
+(deftest portfolio-report-without-commitment-is-held
+  (testing "a KPI report on a deal that was never committed -> HARD hold"
+    (let [[db actor] (fresh)
+          res (exec-op actor "t23" {:op :portfolio/report :subject "deal-1" :period "2026-Q1"
+                                    :kpis {:revenue 0}} operator)]
+      (is (= :hold (get-in res [:state :disposition])))
+      (is (some #{:portfolio-report-without-commitment} (-> (store/ledger db) first :basis)))
+      (is (empty? (store/portfolio-reports-of db "deal-1"))))))
+
+(deftest portfolio-report-auto-commits-once-deal-is-committed
+  (testing "no capital risk -- a KPI report on an already-committed deal auto-commits, no approval needed"
+    (let [[db actor] (fresh)
+          _ (exec-op actor "t24a" {:op :dd/assess :subject "deal-1"} operator)
+          _ (approve! actor "t24a")
+          _ (exec-op actor "t24b" {:op :kyc/screen :subject "party-1"} operator)
+          _ (approve! actor "t24b")
+          _ (exec-op actor "t24c" {:op :deal/advance-stage :subject "deal-1" :to-stage :ic-review} operator)
+          _ (exec-op actor "t24d" {:op :investment/commit :subject "deal-1"} operator)
+          _ (approve! actor "t24d")
+          res (exec-op actor "t24" {:op :portfolio/report :subject "deal-1" :period "2026-Q3"
+                                    :kpis {:revenue 450000 :headcount 12}} operator)]
+      (is (= :commit (get-in res [:state :disposition])))
+      (is (not= :interrupted (:status res)))
+      (is (= 1 (count (store/portfolio-reports-of db "deal-1")))))))
+
 (deftest capital-call-overcall-is-held-and-unoverridable
   (testing "a call far exceeding total fund commitments -> HOLD, never reaches a human"
     (let [[db actor] (fresh)
@@ -143,6 +198,7 @@
           _ (approve! actor "t8a")
           _ (exec-op actor "t8b" {:op :kyc/screen :subject "party-1"} operator)
           _ (approve! actor "t8b")
+          _ (exec-op actor "t8c" {:op :deal/advance-stage :subject "deal-1" :to-stage :ic-review} operator)
           r1 (exec-op actor "t8" {:op :investment/commit :subject "deal-1"} operator)]
       (is (= :interrupted (:status r1)) "pauses for human approval even when governor-clean")
       (testing "approve -> commit, investment-commitment record drafted"
@@ -155,6 +211,7 @@
     (let [[db actor] (fresh)
           _ (exec-op actor "t9a" {:op :dd/assess :subject "deal-1"} operator)
           _ (approve! actor "t9a")
+          _ (exec-op actor "t9c" {:op :deal/advance-stage :subject "deal-1" :to-stage :ic-review} operator)
           _ (exec-op actor "t9" {:op :investment/commit :subject "deal-1"} operator)
           r2 (g/run* actor {:approval {:status :rejected :by "op-1"}}
                      {:thread-id "t9" :resume? true})]
@@ -166,6 +223,7 @@
     (let [[db actor] (fresh)
           _ (exec-op actor "t10a" {:op :dd/assess :subject "deal-1"} operator)
           _ (approve! actor "t10a")
+          _ (exec-op actor "t10z" {:op :deal/advance-stage :subject "deal-1" :to-stage :ic-review} operator)
           _ (exec-op actor "t10b" {:op :investment/commit :subject "deal-1"} operator)
           _ (approve! actor "t10b")
           r1 (exec-op actor "t10" {:op :exit/distribute :subject "deal-1"

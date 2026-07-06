@@ -1,13 +1,15 @@
 (ns vcfund.sim
   "Demo driver -- `clojure -M:dev:run`. Walks a clean LP + deal through
-  LP intake -> deal DD assessment -> KYC screening -> capital-call proposal
-  (always escalates) -> human approval -> commit -> investment-commitment
-  proposal (always escalates) -> human approval -> commit -> exit-
-  distribution proposal (always escalates) -> human approval -> commit,
-  then shows three HARD holds (a sanctions hit, a fabricated jurisdiction,
-  and an overcalled capital call) that never reach a human at all, and
-  prints the audit ledger + the draft capital-call/commitment/distribution
-  records."
+  LP intake -> deal DD assessment -> KYC screening -> pipeline-stage
+  advance to :ic-review (auto-commits, no capital risk) -> capital-call
+  proposal (always escalates) -> human approval -> commit -> investment-
+  commitment proposal (always escalates) -> human approval -> commit ->
+  portfolio KPI report (auto-commits) -> exit-distribution proposal
+  (always escalates) -> human approval -> commit, then shows four HARD
+  holds (a sanctions hit, a fabricated jurisdiction, an overcalled capital
+  call, and an illegal pipeline-stage transition) that never reach a human
+  at all, and prints the audit ledger + the draft capital-call/commitment/
+  distribution/portfolio-report records."
   (:require [langgraph.graph :as g]
             [vcfund.store :as store]
             [vcfund.operation :as op]))
@@ -35,6 +37,9 @@
     (println (exec! actor "t3" {:op :kyc/screen :subject "party-1"} operator))
     (println (approve! actor "t3"))
 
+    (println "== deal/advance-stage deal-1 :sourced -> :ic-review (no capital risk; auto-commits) ==")
+    (println (exec! actor "t3a" {:op :deal/advance-stage :subject "deal-1" :to-stage :ic-review} operator))
+
     (println "== capital-call/issue deal-1 (call $2,000,000 pro-rata from LPs; always escalates -- actuation/call) ==")
     (let [r (exec! actor "t3b" {:op :capital-call/issue :subject "deal-1"
                                :call-amount 2000000 :notice-date "2026-07-06"} operator)]
@@ -47,6 +52,10 @@
       (println r)
       (println "-- human Investment Committee approves --")
       (println (approve! actor "t4")))
+
+    (println "== portfolio/report deal-1 (Q3 KPIs on a committed deal; no capital risk; auto-commits) ==")
+    (println (exec! actor "t4b" {:op :portfolio/report :subject "deal-1" :period "2026-Q3"
+                                :kpis {:revenue 450000 :burn-rate 80000 :runway-months 14 :headcount 12}} operator))
 
     (println "== exit/distribute deal-1 (exit for 12,000,000 after 3y; always escalates -- actuation/distribute) ==")
     (let [r (exec! actor "t5" {:op :exit/distribute :subject "deal-1"
@@ -65,6 +74,9 @@
     (println (exec! actor "t8" {:op :capital-call/issue :subject "deal-3"
                                 :call-amount 20000000 :notice-date "2026-07-06"} operator))
 
+    (println "== deal/advance-stage deal-3 :sourced -> :committed (illegal -- only the real commit op may reach :committed -> HARD hold) ==")
+    (println (exec! actor "t9" {:op :deal/advance-stage :subject "deal-3" :to-stage :committed} operator))
+
     (println "== audit ledger ==")
     (doseq [f (store/ledger db)] (println f))
 
@@ -73,6 +85,9 @@
 
     (println "== draft investment-commitment records ==")
     (doseq [r (store/commitment-history db)] (println r))
+
+    (println "== draft portfolio-report records (deal-1) ==")
+    (doseq [r (store/portfolio-reports-of db "deal-1")] (println r))
 
     (println "== draft exit-distribution records ==")
     (doseq [r (store/distribution-history db)] (println r))))

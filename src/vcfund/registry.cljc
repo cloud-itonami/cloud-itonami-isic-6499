@@ -1,6 +1,7 @@
 (ns vcfund.registry
-  "Pure-function capital-call, investment-commitment and exit-distribution
-  record construction -- an append-only venture-fund capital-movement draft.
+  "Pure-function capital-call, investment-commitment, exit-distribution and
+  portfolio-report record construction -- an append-only venture-fund
+  capital-movement/monitoring draft.
 
   Like `cloud-itonami-isic-6511`'s `underwriting.registry`, there is no
   single international identifier standard for a fund's investment-
@@ -188,6 +189,28 @@
               "effective_date" effective-date
               "immutable" true}
      "certificate" (unsigned-certificate "ExitDistributionCertificate" commitment-number record-id)}))
+
+(defn register-portfolio-report
+  "Validate + construct a portfolio-monitoring KPI report DRAFT for a
+  committed deal -- board-reporting-style facts (revenue, burn, runway,
+  headcount, whatever `kpis` the operator's board-report template asks
+  for) as of a given `period`. Pure function -- `kpis` are real facts the
+  operator supplies from the actual board deck/data room, never invented
+  here. No certificate: this is an internal monitoring record, not a
+  legal instrument."
+  [deal-id period kpis]
+  (when-not (and deal-id (not= deal-id ""))
+    (throw (ex-info "portfolio-report: deal-id required" {})))
+  (when-not (and period (not= period ""))
+    (throw (ex-info "portfolio-report: period required" {})))
+  (when-not (map? kpis)
+    (throw (ex-info "portfolio-report: kpis must be a map" {})))
+  {"record" {"record_id" (str deal-id "#report@" period)
+            "kind" "portfolio-report"
+            "deal_id" deal-id
+            "period" period
+            "kpis" kpis
+            "immutable" true}})
 
 (defn append
   "Append a commitment/distribution record, returning a NEW list (never

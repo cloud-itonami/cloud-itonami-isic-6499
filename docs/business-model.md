@@ -26,13 +26,18 @@
 
 ## Offer
 
+- deal pipeline tracking (sourcing → screening → pitched → term-sheet →
+  dd → ic-review), illegal transitions blocked
 - LP subscription intake (commitment amount, capital account, accredited-
   investor/QP affirmation)
 - deal due-diligence checklist proposal against a named framework's
   spec-basis
 - AML/sanctions screening for LPs and portfolio-company parties
 - capital-call notice proposal, pro-rata by commitment share, overcall-blocked
-- Investment Committee capital-deployment proposal
+- Investment Committee capital-deployment proposal (requires the deal to
+  have actually reached Investment Committee review in the pipeline)
+- portfolio-company KPI/board-report logging for committed deals
+- SAFE-conversion and priced-round ownership/dilution estimates
 - exit-proceeds waterfall distribution proposal
 - immutable audit ledger
 

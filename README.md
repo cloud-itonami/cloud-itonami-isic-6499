@@ -2,9 +2,10 @@
 
 Open Business Blueprint for **ISIC Rev.4/5 6499**: Other financial service
 activities, except insurance and pension funding, n.e.c. -- specifically
-the class's own-account-investing member, a **venture capital fund**: LP
-subscription intake, deal due diligence, capital calls, Investment
-Committee capital deployment, and exit distribution back to LPs.
+the class's own-account-investing member, a **venture capital fund**: deal
+pipeline/sourcing, LP subscription intake, deal due diligence, capital
+calls, Investment Committee capital deployment, portfolio-company KPI
+monitoring, and exit distribution back to LPs.
 
 UN ISIC Rev.4's own explanatory note for 6499 names this activity
 explicitly: *"own-account investment activities, such as by venture
@@ -42,10 +43,12 @@ interrupts, Datomic/in-mem checkpoints) -- the same actor pattern as
 
 ## Scope: what this actor does and does not do
 
-This actor drafts and governs a venture-fund lifecycle: LP subscription
+This actor drafts and governs a venture-fund lifecycle: deal pipeline
+tracking (sourcing through Investment Committee review), LP subscription
 intake, AML/sanctions screening, per-deal due-diligence checklisting, a
 capital-call proposal, an Investment-Committee capital-deployment
-proposal, and an exit/distribution proposal. It does **not**, by itself,
+proposal, portfolio-company KPI reporting, and an exit/distribution
+proposal. It does **not**, by itself,
 hold a license or exemption to operate a fund in any jurisdiction, and it
 does not claim to. Whoever deploys and operates a live instance (a
 licensed/exempt GP, a fund administrator) supplies the jurisdiction-specific
@@ -147,38 +150,44 @@ the same "self-contained sibling" relationship `cloud-itonami-isic-6511`'s
 
 | File | Role |
 |---|---|
-| `src/vcfund/store.cljc` | **Store** protocol -- `MemStore` ‖ `DatomicStore` (`langchain.db`) + append-only audit ledger + capital-call/investment/distribution history |
-| `src/vcfund/registry.cljc` | Capital-call pro-rata allocation + investment-commitment draft records + exit-distribution waterfall calc (deal-by-deal, documented limitation -- see docstring) |
+| `src/vcfund/store.cljc` | **Store** protocol -- `MemStore` ‖ `DatomicStore` (`langchain.db`) + append-only audit ledger + capital-call/investment/distribution/portfolio-report history |
+| `src/vcfund/registry.cljc` | Capital-call pro-rata allocation + investment-commitment draft records + exit-distribution waterfall calc (deal-by-deal, documented limitation) + portfolio-report drafts |
+| `src/vcfund/pipeline.cljc` | Pure deal-pipeline funnel model (sourcing → screening → pitched → term-sheet → dd → ic-review), forward-only transitions, `:committed`/`:exited` reachable only via the real capital ops |
+| `src/vcfund/captable.cljc` | Pure SAFE-conversion and priced-round ownership/dilution calculator (percentage-of-company terms; see docstring for what it deliberately does NOT model) |
 | `src/vcfund/facts.cljc` | Per-jurisdiction fund-formation/exemption-regime catalog with an official spec-basis citation per entry, honest coverage reporting |
-| `src/vcfund/ddllm.cljc` | **DD-LLM Advisor** -- `mock-advisor` ‖ `llm-advisor`; LP-intake/DD/KYC/capital-call/commitment/distribution proposals |
-| `src/vcfund/governor.cljc` | **InvestmentCommitteeGovernor** -- spec-basis · sanctions hold · DD-complete · accredited-investor · capital-call overcall · confidence floor · triple actuation gate |
-| `src/vcfund/phase.cljc` | **Phase 0→3** -- read-only → assisted intake → assisted DD/screen → supervised (call/commit/distribute always human) |
+| `src/vcfund/ddllm.cljc` | **DD-LLM Advisor** -- `mock-advisor` ‖ `llm-advisor`; LP-intake/DD/KYC/stage-advance/capital-call/commitment/portfolio-report/distribution proposals |
+| `src/vcfund/governor.cljc` | **InvestmentCommitteeGovernor** -- spec-basis · sanctions hold · DD-complete · stage-insufficient · stage-transition · accredited-investor · capital-call overcall · portfolio-report-requires-commitment · confidence floor · triple actuation gate |
+| `src/vcfund/phase.cljc` | **Phase 0→3** -- read-only → assisted intake → assisted DD/screen → supervised (call/commit/distribute always human; stage-advance/portfolio-report auto-eligible, no capital risk) |
 | `src/vcfund/operation.cljc` | **OperationActor** -- langgraph-clj StateGraph |
 | `src/vcfund/sim.cljc` | demo driver |
-| `test/vcfund/*_test.clj` | governor contract · phase invariants · store parity · registry conformance · facts coverage |
+| `test/vcfund/*_test.clj` | governor contract · phase invariants · store parity · registry conformance · pipeline/captable unit tests · facts coverage |
 
 ## Business-process coverage (honest)
 
-This actor covers **four governed decision gates** in a VC fund's
-lifecycle, plus the audit ledger. It does **not** cover the surrounding
-day-to-day fund operations. Stated plainly so nobody mistakes gate
-coverage for full fund-administration coverage:
+This actor covers **six governed decision gates** in a VC fund's
+lifecycle, a pipeline/cap-table calculator layer, plus the audit ledger. It
+does **not** cover the surrounding day-to-day fund operations. Stated
+plainly so nobody mistakes gate coverage for full fund-administration
+coverage:
 
 | Covered | Not covered (out of scope for this R0) |
 |---|---|
+| Deal pipeline: sourcing → screening → pitched → term-sheet → dd → ic-review, forward-only, illegal transitions HARD-blocked (`vcfund.pipeline`) | Whole-fund NAV / unfunded-commitment reporting beyond per-LP `:called-amount` |
 | LP subscription intake + fund-wide accredited-investor gate | Fund formation, LPA drafting, fund closes, side letters |
-| Capital calls, pro-rata by commitment share, overcall-blocked | Whole-fund NAV / unfunded-commitment reporting beyond per-LP `:called-amount` |
-| Deal DD checklist vs. named jurisdiction spec-basis | Deal *pipeline* / sourcing-funnel management across many deals at once (each deal is tracked, but there is no funnel/stage-transition model) |
-| AML/sanctions screening (LPs, founders) | Term-sheet negotiation, cap-table dilution/valuation math |
-| Investment-Committee capital deployment | Portfolio-company monitoring between commit and exit -- board seats, KPI/board reporting, follow-on decisions (nothing happens in this window today) |
-| Exit-proceeds waterfall (deal-by-deal: return of capital → preferred return → GP carry) | Whole-fund European waterfall with cross-deal netting and GP clawback (explicitly out of scope, see `docs/adr/0001-architecture.md`) |
-| Immutable audit ledger for every call/commit/distribute decision | Tax reporting (K-1s etc.), regulatory filings (Form D/ADV), real fund-accounting-system integration |
+| Capital calls, pro-rata by commitment share, overcall-blocked | Term-sheet *negotiation* workflow (the captable calculator informs a decision; it isn't wired into a negotiation/redlining process) |
+| Deal DD checklist vs. named jurisdiction spec-basis, AND a HARD gate that `:investment/commit` requires the deal to have actually reached `:ic-review` in the pipeline | Whole-fund European waterfall with cross-deal netting and GP clawback (explicitly out of scope, see `docs/adr/0001-architecture.md`) |
+| AML/sanctions screening (LPs, founders) | Absolute share counts / fully-diluted cap table / option-pool sizing (`vcfund.captable` is percentage-of-company only, see its docstring) |
+| Investment-Committee capital deployment | Follow-on investment decisions (modeled today as: source a new deal record for the follow-on round, run it through the same DD→commit lifecycle -- no dedicated "follow-on" op) |
+| Portfolio-company KPI/board reporting for committed deals (`:portfolio/report`, HARD-gated on the deal actually being committed) | Board seats / governance rights administration |
+| SAFE-conversion and priced-round ownership/dilution math (`vcfund.captable`, percentage terms) | Tax reporting (K-1s etc.), regulatory filings (Form D/ADV), real fund-accounting-system integration |
+| Exit-proceeds waterfall (deal-by-deal: return of capital → preferred return → GP carry) | |
+| Immutable audit ledger for every call/commit/report/distribute decision | |
 
 Extending coverage is additive, the same discipline as jurisdiction
-coverage: add the next gate (capital calls were the first addition beyond
-the initial four-gate R0) as its own governed op with its own HARD checks
-and tests, never silently expand scope without a corresponding governor
-rule and test.
+coverage: add the next gate as its own governed op with its own HARD
+checks and tests (capital calls, then pipeline/portfolio-monitoring/
+cap-table math, were the first additions beyond the initial four-gate R0),
+never silently expand scope without a corresponding governor rule and test.
 
 ## Jurisdiction coverage (honest)
 

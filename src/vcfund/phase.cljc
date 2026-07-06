@@ -12,12 +12,14 @@
                                  write needs human approval.
     Phase 2  + dd/screen      -- adds deal DD assessment + KYC screening
                                  writes (still approval).
-    Phase 3  supervised auto  -- governor-clean, high-confidence LP-INTAKE
-                                 writes may auto-commit. DD assessment and
-                                 KYC screening still escalate (a human
-                                 should see a deal/party determination
-                                 before it becomes the basis for a capital
-                                 call or commitment).
+    Phase 3  supervised auto  -- governor-clean, high-confidence writes with
+                                 NO capital risk (LP intake, pipeline-stage
+                                 advance, portfolio KPI report) may
+                                 auto-commit. DD assessment and KYC
+                                 screening still escalate (a human should
+                                 see a deal/party determination before it
+                                 becomes the basis for a capital call or
+                                 commitment).
 
   `:capital-call/issue` (drawing real committed capital in from LPs),
   `:investment/commit` (deploying real fund capital) and
@@ -28,10 +30,15 @@
   human Investment Committee call; see README `Actuation`. The
   InvestmentCommitteeGovernor's `:actuation/call`/`:actuation/deploy`/
   `:actuation/distribute` high-stakes gate (`vcfund.governor`) enforces the
-  same invariant independently -- two layers, not one, agree on this.")
+  same invariant independently -- two layers, not one, agree on this.
+  `:deal/advance-stage` and `:portfolio/report` move no capital (governed
+  by HARD checks in `vcfund.governor`, but never `high-stakes`), so they
+  ARE auto-eligible at phase 3 -- a deliberately lighter touch matching
+  their actual risk.")
 
 (def read-ops  #{:coverage/report})
-(def write-ops #{:lp/intake :kyc/screen :dd/assess :capital-call/issue :investment/commit :exit/distribute})
+(def write-ops #{:lp/intake :kyc/screen :dd/assess :deal/advance-stage :capital-call/issue
+                 :investment/commit :portfolio/report :exit/distribute})
 
 ;; NOTE the invariant: `:capital-call/issue`, `:investment/commit` and
 ;; `:exit/distribute` are members of `write-ops` (governor-gated like any
@@ -43,7 +50,8 @@
   {0 {:label "read-only"       :writes #{}                                                       :auto #{}}
    1 {:label "assisted-intake" :writes #{:lp/intake}                                              :auto #{}}
    2 {:label "assisted-dd"     :writes #{:lp/intake :dd/assess :kyc/screen}                       :auto #{}}
-   3 {:label "supervised-auto" :writes write-ops                                                  :auto #{:lp/intake}}})
+   3 {:label "supervised-auto" :writes write-ops
+      :auto #{:lp/intake :deal/advance-stage :portfolio/report}}})
 
 (def default-phase 3)
 
