@@ -1,6 +1,7 @@
 (ns vcfund.captable
-  "Pure term-sheet / cap-table math -- SAFE conversion (single AND
-  multi-SAFE simultaneous conversion), SAFT (Simple Agreement for Future
+  "Pure term-sheet / cap-table math -- SAFE conversion (single, multi-SAFE
+  pre-money-anchored simultaneous conversion, AND multi-SAFE post-money
+  circular-ownership conversion), SAFT (Simple Agreement for Future
   Tokens, the crypto-native analog of a SAFE) conversion, priced-round
   ownership/dilution (percentage AND absolute share-count terms),
   option-pool-shuffle, vesting schedules and option-exercise economics.
@@ -16,10 +17,20 @@
 
   `safe-conversion`/`priced-round-ownership` work in ownership PERCENTAGES
   only. `priced-round-shares`/`option-pool-shuffle`/`cap-table-ownership`/
-  `multi-safe-conversion-shares` add ABSOLUTE share-count terms, given a
-  caller-supplied fully-diluted share count -- this module does not invent
-  one; a real company's actual share count comes from its cap-table
-  system/transfer agent.
+  `multi-safe-conversion-shares`/`post-money-multi-safe-conversion-shares`
+  add ABSOLUTE share-count terms, given a caller-supplied fully-diluted
+  share count -- this module does not invent one; a real company's actual
+  share count comes from its cap-table system/transfer agent.
+
+  `multi-safe-conversion-shares` assumes every SAFE converts against the
+  SAME, FIXED `pre-conversion-shares` baseline (the traditional
+  pre-money-SAFE convention: each SAFE's cap is a claim against the
+  shares outstanding BEFORE any of them convert, so there is no order
+  dependency to solve). `post-money-multi-safe-conversion-shares` handles
+  the genuinely order-dependent case -- the YC 2018-style post-money SAFE,
+  where each SAFE's cap is a claim against the shares outstanding AFTER
+  all of them convert, an exact closed-form solve (see its docstring),
+  restricted to cap-only SAFEs converting together.
 
   Still deliberately SIMPLIFIED, and honestly so: `vesting-schedule` is
   linear-with-cliff only; `accelerated-vesting` layers single-trigger
@@ -28,13 +39,12 @@
   acceleration event per call -- no partial-acceleration provisions (e.g.
   \"12 months of additional vesting\" rather than 100%), which some real
   grants negotiate instead; `option-exercise-economics` is intrinsic
-  value only (no tax treatment -- ISO vs. NSO, AMT, 83(b) elections);
-  `multi-safe-conversion-shares` assumes every SAFE converts against the
-  SAME `pre-conversion-shares` baseline (no modeling of conversion order
-  mattering, which a truly rigorous simultaneous-conversion solve would
-  need for some cap/discount combinations); no liquidation-preference
-  stacking. Never silently claim this produces an authoritative
-  company-of-record cap table.")
+  value only (no tax treatment -- ISO vs. NSO, AMT, 83(b) elections); a
+  round mixing pre-money AND post-money SAFEs together, or post-money
+  SAFEs converting partly on a discount instead of their cap, is not
+  modeled (pick the one fn matching the round's actual convention); no
+  liquidation-preference stacking. Never silently claim this produces an
+  authoritative company-of-record cap table.")
 
 (defn safe-conversion
   "SAFE conversion math: the SAFE holder converts at whichever is more
@@ -250,6 +260,67 @@
     {:per-safe per-safe
      :total-safe-shares total-safe-shares
      :post-safe-conversion-shares (+ pre-conversion-shares total-safe-shares)}))
+
+(defn post-money-multi-safe-conversion-shares
+  "Multiple POST-MONEY SAFEs (the YC 2018-style convention where a SAFE's
+  `valuation-cap` is a direct claim on a % of the company AFTER all SAFEs
+  in the round convert, not a claim priced against the shares outstanding
+  BEFORE any of them convert) converting simultaneously, in ABSOLUTE
+  SHARE-COUNT terms -- the order-dependent case `multi-safe-conversion-
+  shares`'s docstring flags as unmodeled by that fn's simpler
+  pre-money-anchored mechanic.
+
+  Under a post-money SAFE, `:ownership-pct` = `investment-amount /
+  valuation-cap` DIRECTLY (the cap already represents the SAFE's
+  post-conversion ownership stake). N such SAFEs converting TOGETHER form
+  a small circular system: each one's ownership-pct is fixed and
+  independent of the others, but the ABSOLUTE share count every SAFE
+  receives depends on the TOTAL post-conversion share count, which itself
+  depends on every OTHER SAFE's shares. This fn solves that system in
+  closed form (exact algebra, not an approximation or an iterative
+  fixed-point search):
+
+    k = sum(investment-amount_i / valuation-cap_i)   (sum of ownership-pcts)
+    post-safe-conversion-shares = pre-conversion-shares / (1 - k)
+    new-shares_i = ownership-pct_i * post-safe-conversion-shares
+
+  Cap-only: every SAFE must supply `:valuation-cap` -- a post-money SAFE
+  converting on a discount instead has a DIFFERENT, non-circular mechanic
+  (already covered by `safe-conversion`/`multi-safe-conversion-shares`);
+  mixing the two conventions in one call is out of scope here (see ns
+  docstring).
+
+  Throws if the combined ownership fraction `k` reaches or exceeds 1.0 --
+  an oversubscribed round whose caps alone already claim the whole
+  company is not a solvable cap table.
+
+  Returns `{:per-safe [{:id :ownership-pct :new-shares} ..]
+  :total-safe-shares :post-safe-conversion-shares}`."
+  [{:keys [safes pre-conversion-shares]}]
+  (when (empty? safes)
+    (throw (ex-info "post-money-multi-safe-conversion-shares: at least one SAFE required" {})))
+  (when-not (pos? pre-conversion-shares)
+    (throw (ex-info "post-money-multi-safe-conversion-shares: pre-conversion-shares must be > 0" {})))
+  (doseq [{:keys [id investment-amount valuation-cap]} safes]
+    (when (neg? investment-amount)
+      (throw (ex-info (str "post-money-multi-safe-conversion-shares: " id ": investment-amount must be >= 0") {})))
+    (when-not (and valuation-cap (pos? valuation-cap))
+      (throw (ex-info (str "post-money-multi-safe-conversion-shares: " id ": valuation-cap required and must be > 0") {}))))
+  (let [pre-conversion-shares (double pre-conversion-shares)
+        ownership (mapv (fn [{:keys [id investment-amount valuation-cap]}]
+                          {:id id :ownership-pct (/ (double investment-amount) (double valuation-cap))})
+                        safes)
+        k (reduce + (map :ownership-pct ownership))]
+    (when (>= k 1.0)
+      (throw (ex-info "post-money-multi-safe-conversion-shares: combined SAFE ownership caps reach or exceed 100% of the company -- oversubscribed, not solvable" {})))
+    (let [post-safe-conversion-shares (/ pre-conversion-shares (- 1.0 k))
+          per-safe (mapv (fn [{:keys [id ownership-pct]}]
+                          {:id id :ownership-pct ownership-pct
+                           :new-shares (* ownership-pct post-safe-conversion-shares)})
+                        ownership)]
+      {:per-safe per-safe
+       :total-safe-shares (reduce + (map :new-shares per-safe))
+       :post-safe-conversion-shares post-safe-conversion-shares})))
 
 (defn vesting-schedule
   "Standard time-based equity vesting: `total-shares` vest linearly over

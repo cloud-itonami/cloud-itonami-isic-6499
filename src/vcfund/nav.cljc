@@ -21,11 +21,15 @@
   investment period (a real LPA's fee schedule often steps down, e.g.
   2% -> 1.5%, around year 5 -- see `:investment-period-years`/
   `:post-investment-period-rate`; a fund with more than one step, or a
-  compounding/re-basing schedule, is still not modeled), no multi-currency
-  FX conversion (assumes one fund base currency), a deal's fair value
-  defaults to its cost basis (the commitment amount) until an operator
-  records a `:fair-value-mark` KPI via `:portfolio/report` -- never
-  silently mark up an unvalued investment."
+  compounding/re-basing schedule, is still not modeled); multi-currency FX
+  is PARTIALLY modeled via `convert-currency`/`unfunded-commitments`'s
+  OPTIONAL `:base-currency`/`:fx-rates` (LP-level commitment/called
+  amounts convert into one base currency, given caller-supplied rates --
+  never looked up or invented here) -- deal-level (commitment/
+  distribution) currency conversion is a separate, still-unmodeled gap;
+  a deal's fair value defaults to its cost basis (the commitment amount)
+  until an operator records a `:fair-value-mark` KPI via `:portfolio/
+  report` -- never silently mark up an unvalued investment."
   (:require [vcfund.store :as store]))
 
 (def default-management-fee-rate
@@ -34,16 +38,51 @@
   always governs; this is a default for demos/tests only."
   0.02)
 
+(defn convert-currency
+  "Converts `amount` (denominated in `from-currency`) into `to-currency`
+  using a caller-supplied `rate` (units of `to-currency` per 1 unit of
+  `from-currency`) -- a REAL market fact the caller supplies (a spot
+  rate, a rate-lock, whatever the fund's actual FX policy is), never
+  looked up or invented here. Same-currency conversion (`from-currency`
+  = `to-currency`) is always a no-op regardless of `rate` -- a caller
+  need not supply a trivial 1.0 rate for an amount already in the base
+  currency."
+  [{:keys [amount from-currency to-currency rate]}]
+  (when (neg? amount) (throw (ex-info "convert-currency: amount must be >= 0" {})))
+  (when-not (and from-currency (not= from-currency ""))
+    (throw (ex-info "convert-currency: from-currency required" {})))
+  (when-not (and to-currency (not= to-currency ""))
+    (throw (ex-info "convert-currency: to-currency required" {})))
+  (if (= from-currency to-currency)
+    (double amount)
+    (do (when-not (and rate (pos? rate))
+          (throw (ex-info (str "convert-currency: a positive fx-rate is required to convert "
+                              from-currency " -> " to-currency) {})))
+        (* (double amount) (double rate)))))
+
 (defn unfunded-commitments
   "Per-LP and fund-wide unfunded commitment: commitment - called. The
   fund-wide total is what the GP can still legally call under the LPA
   (subject to any investment-period/re-up terms, which this does not
-  model)."
-  [lps]
+  model).
+
+  OPTIONALLY converts every LP's commitment/called amount into ONE
+  `base-currency` before summing, given a caller-supplied `fx-rates` map
+  (`{currency-code rate-to-base}`, via `convert-currency` -- REAL market
+  facts, never looked up here). Pass `:base-currency`/`:fx-rates` for a
+  multi-currency LP directory; omit both (the default) to sum face value
+  with no conversion, the single-currency behavior every earlier caller
+  already relies on."
+  [lps & [{:keys [base-currency fx-rates]}]]
   (when (empty? lps) (throw (ex-info "unfunded-commitments: at least one LP required" {})))
-  (let [rows (mapv (fn [{:keys [id commitment-amount called-amount]}]
-                     (let [commitment-amount (double commitment-amount)
-                           called-amount (double (or called-amount 0))]
+  (let [conv (fn [amount currency]
+               (if (and base-currency currency (not= currency base-currency))
+                 (convert-currency {:amount amount :from-currency currency
+                                   :to-currency base-currency :rate (get fx-rates currency)})
+                 (double amount)))
+        rows (mapv (fn [{:keys [id commitment-amount called-amount currency]}]
+                     (let [commitment-amount (conv commitment-amount currency)
+                           called-amount (conv (or called-amount 0) currency)]
                        {:lp-id id
                         :commitment-amount commitment-amount
                         :called-amount called-amount
@@ -151,22 +190,32 @@
   commitments at `annual-fee-rate` (default `default-management-fee-rate`).
   `investment-period-years`/`post-investment-period-rate` -- OPTIONAL, see
   `management-fee-accrued` for the step-down they model; omit both for the
-  flat-rate default."
+  flat-rate default.
+  `base-currency`/`fx-rates` -- OPTIONAL, see `unfunded-commitments` for
+  the LP-level FX conversion they enable; omit both for single-currency,
+  no-conversion behavior (the default -- every earlier caller's exact
+  behavior)."
   ([st] (fund-nav-report st {}))
-  ([st {:keys [fund-life-years annual-fee-rate investment-period-years post-investment-period-rate]
+  ([st {:keys [fund-life-years annual-fee-rate investment-period-years post-investment-period-rate
+              base-currency fx-rates]
         :or {fund-life-years 0 annual-fee-rate default-management-fee-rate}}]
   (let [lps (store/all-lps st)
         committed-deals (filter #(contains? #{:committed :exited} (:status %)) (store/all-deals st))
         commitment-recs (store/commitment-history st)
         distribution-recs (store/distribution-history st)
-        total-called (reduce + (map #(double (or (:called-amount %) 0)) lps))
+        conv (fn [amount currency]
+               (if (and base-currency currency (not= currency base-currency))
+                 (convert-currency {:amount amount :from-currency currency
+                                    :to-currency base-currency :rate (get fx-rates currency)})
+                 (double amount)))
+        total-called (reduce + (map #(conv (or (:called-amount %) 0) (:currency %)) lps))
         total-invested-at-cost (reduce + (map #(double (get % "amount" 0)) commitment-recs))
         total-distributed-to-lps (reduce + (map #(double (:total-to-lp (get % "waterfall"))) distribution-recs))
         total-exit-proceeds-received (reduce + (map #(+ (double (:total-to-lp (get % "waterfall")))
                                                          (double (:total-to-gp (get % "waterfall"))))
                                                      distribution-recs))
         management-fees-accrued (management-fee-accrued
-                                  {:fee-basis (reduce + (map #(double (:commitment-amount %)) lps))
+                                  {:fee-basis (reduce + (map #(conv (:commitment-amount %) (:currency %)) lps))
                                    :annual-fee-rate annual-fee-rate
                                    :years-elapsed fund-life-years
                                    :investment-period-years investment-period-years
@@ -183,5 +232,6 @@
                       :total-distributed-to-lps total-distributed-to-lps
                       :management-fees-accrued management-fees-accrued
                       :investments investments})
-           :unfunded (when (seq lps) (unfunded-commitments lps))
+           :unfunded (when (seq lps)
+                       (unfunded-commitments lps {:base-currency base-currency :fx-rates fx-rates}))
            :management-fees-accrued management-fees-accrued))))

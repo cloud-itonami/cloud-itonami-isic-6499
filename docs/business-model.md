@@ -49,13 +49,15 @@
 - board-seat/governance-rights administration (grant and revocation) for
   committed deals, with a current-roster projection over the append-only
   event log
-- SAFE/SAFT-conversion, priced-round ownership/dilution (percentage and
-  absolute share-count terms), option-pool-shuffle, multi-SAFE conversion,
+- SAFE/SAFT-conversion (both pre-money and post-money multi-SAFE
+  simultaneous-conversion conventions), priced-round ownership/dilution
+  (percentage and absolute share-count terms), option-pool-shuffle,
   vesting (with single/double-trigger change-of-control acceleration) and
   option-exercise estimates
 - crypto-native deal support (SAFT token deals, on-chain LP wallet settlement)
-- whole-fund NAV, unfunded-commitment and management-fee reporting
-  (optional step-down after the investment period)
+- whole-fund NAV, unfunded-commitment (optional multi-currency conversion
+  for LPs denominated in different currencies) and management-fee
+  reporting (optional step-down after the investment period)
 - exit-proceeds waterfall distribution proposal
 - immutable audit ledger
 

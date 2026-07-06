@@ -592,3 +592,83 @@ real e-signature PROVIDER integration and redlining UI, order-dependent
 multi-SAFE simultaneous-conversion solving, option tax treatment (ISO/
 NSO/AMT, 83(b)), multi-currency FX, tax/regulatory reporting (K-1s, Form
 D/ADV).
+
+## Addendum 8 (2026-07-06, same day, autonomous /loop iteration): post-money multi-SAFE closed-form solve, LP-level multi-currency FX
+
+No new explicit owner direction again -- the recurring `/loop` prompt
+asked for coverage/maturity improvement, so this autonomously picked two
+items off Addendum 7's remaining-gaps list: "order-dependent multi-SAFE
+simultaneous-conversion solving" and "multi-currency FX." Real
+e-signature-provider integration, option tax treatment (ISO/NSO/AMT) and
+tax/regulatory reporting remain out of scope this iteration -- the first
+is a genuine third-party-integration boundary, the latter two are larger,
+riskier lifts (real tax-bracket/AMT computation, real regulatory-filing
+content) better left as their own dedicated pieces of work than folded
+into a fast autonomous iteration.
+
+- **Post-money multi-SAFE closed-form solve** -- new fn
+  `vcfund.captable/post-money-multi-safe-conversion-shares`. The existing
+  `multi-safe-conversion-shares` already correctly handles the TRADITIONAL
+  ("pre-money SAFE") convention, where every SAFE's cap is priced against
+  the SAME, FIXED `pre-conversion-shares` baseline -- there is no order
+  dependency to solve in that convention, so the ns docstring's earlier
+  wording ("no modeling of conversion order mattering... for some cap/
+  discount combinations") was flagging a DIFFERENT, genuinely circular
+  case: the YC 2018-style "post-money SAFE," where a cap is a direct claim
+  on post-conversion ownership (`ownership-pct = investment / cap`), so N
+  such SAFEs converting together each depend on the TOTAL post-conversion
+  share count, which itself depends on every other SAFE's shares. Rather
+  than approximate this with iteration, the fix derives an EXACT closed
+  form: `k = sum(investment_i/cap_i)`; `post-safe-conversion-shares =
+  pre-conversion-shares / (1 - k)`; `new-shares_i = ownership-pct_i *
+  post-safe-conversion-shares` -- verified by hand cross-check in
+  `captable_test.clj` and by confirming `post-safe-conversion-shares =
+  pre-conversion-shares + total-safe-shares` holds algebraically. Throws
+  on an oversubscribed round (`k >= 1.0`, the caps alone already claim
+  100%+ of the company -- not a solvable cap table). Deliberately scoped
+  to cap-only SAFEs (a post-money SAFE converting on a DISCOUNT instead
+  has a different, non-circular mechanic, already covered by
+  `safe-conversion`); mixing pre-money and post-money SAFEs in the same
+  round, or a round with mixed cap/discount post-money SAFEs, remains out
+  of scope (documented in the ns docstring, not silently ignored).
+- **LP-level multi-currency FX** -- new fn `vcfund.nav/convert-currency`
+  (pure: `amount`/`from-currency`/`to-currency`/`rate`, same-currency is
+  always a no-op regardless of `rate`, a cross-currency conversion
+  requires a caller-supplied positive `rate` -- never looked up or
+  invented). `unfunded-commitments` gained OPTIONAL `:base-currency`/
+  `:fx-rates` args (a currency->rate map) to convert each LP's commitment/
+  called amount into one base currency before summing; omitting both
+  preserves the exact single-currency behavior every earlier caller
+  relies on (verified with a dedicated backward-compatibility test:
+  `unfunded-commitments-without-fx-options-ignores-currency-field`).
+  `fund-nav-report` threads the same options through to BOTH the
+  unfunded-commitments call and the management-fee basis calculation
+  (also a sum over LP commitment amounts). Deliberately bounded: this
+  converts LP-level amounts only -- a deal's `:ask-amount`/`:currency` and
+  a distribution's waterfall figures are NOT converted (still single-
+  currency), documented explicitly as the remaining half of the FX gap
+  rather than silently claimed as solved.
+- Neither addition touches `vcfund.governor`/`vcfund.phase`/`vcfund.store`
+  -- both `vcfund.captable` and `vcfund.nav` are pure calculator modules
+  with no governor gating (setting/negotiating valuation terms or
+  computing NAV moves no capital), so this iteration adds zero new
+  governed decision gates; the "twelve governed decision gates" count is
+  unchanged from Addendum 7.
+
+Consequences: `test/vcfund/*` grew from 142 tests/571 assertions to 153
+tests/599 assertions (new `post-money-multi-safe-conversion-shares` tests
+-- happy path with a hand cross-check, a single-SAFE degenerate case,
+validation rules, and an oversubscribed-round rejection -- in
+`captable_test.clj`; new `convert-currency`/FX-aware `unfunded-
+commitments`/`fund-nav-report` tests, including an explicit backward-
+compatibility test, in `nav_test.clj`), still lint-clean; demo (`clojure
+-M:dev:run`) unaffected (neither addition is a governed op, so sim.cljc
+needed no changes -- consistent with how earlier `vcfund.captable`/
+`vcfund.nav` additions were never wired into the demo driver either,
+only `vcfund.waterfall` was, because the clawback-repay demo needed a
+real number). Remaining honest gaps (tracked in README's "Business-
+process coverage" table): a real e-signature PROVIDER integration and
+redlining UI, mixed pre-money/post-money or mixed cap/discount post-money
+multi-SAFE rounds, option tax treatment (ISO/NSO/AMT, 83(b)), deal-level/
+distribution-level currency conversion, tax/regulatory reporting (K-1s,
+Form D/ADV).

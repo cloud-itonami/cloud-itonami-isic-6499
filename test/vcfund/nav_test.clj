@@ -19,6 +19,39 @@
 (deftest unfunded-commitments-validation-rules
   (is (thrown? Exception (nav/unfunded-commitments []))))
 
+;; ----------------------------- multi-currency FX -----------------------------
+
+(deftest convert-currency-same-currency-is-a-noop
+  (is (close? 500.0 (nav/convert-currency {:amount 500 :from-currency "USD" :to-currency "USD" :rate nil}))))
+
+(deftest convert-currency-applies-the-rate-across-currencies
+  (is (close? 5.0 (nav/convert-currency {:amount 500 :from-currency "JPY" :to-currency "USD" :rate 0.01}))))
+
+(deftest convert-currency-validation-rules
+  (is (thrown? Exception (nav/convert-currency {:amount -1 :from-currency "USD" :to-currency "USD"})))
+  (is (thrown? Exception (nav/convert-currency {:amount 1 :from-currency "" :to-currency "USD"})))
+  (is (thrown? Exception (nav/convert-currency {:amount 1 :from-currency "USD" :to-currency ""})))
+  (is (thrown? Exception (nav/convert-currency {:amount 1 :from-currency "JPY" :to-currency "USD" :rate nil})))
+  (is (thrown? Exception (nav/convert-currency {:amount 1 :from-currency "JPY" :to-currency "USD" :rate -1}))))
+
+(def multi-currency-lps-fixture
+  [{:id "lp-1" :commitment-amount 2000000 :called-amount 0 :currency "USD"}
+   {:id "lp-2" :commitment-amount 100000000 :called-amount 0 :currency "JPY"}])
+
+(deftest unfunded-commitments-without-fx-options-ignores-currency-field
+  (testing "backward compatible: no base-currency/fx-rates -> sums face value regardless of :currency"
+    (let [r (nav/unfunded-commitments multi-currency-lps-fixture)]
+      (is (close? 102000000.0 (:total-commitments r))))))
+
+(deftest unfunded-commitments-converts-with-fx-rates
+  (let [r (nav/unfunded-commitments multi-currency-lps-fixture
+                                    {:base-currency "USD" :fx-rates {"JPY" 0.01}})]
+    (is (close? 3000000.0 (:total-commitments r)))
+    (is (close? 1000000.0 (:commitment-amount (second (:by-lp r)))) "100,000,000 JPY @ 0.01 -> 1,000,000 USD")))
+
+(deftest unfunded-commitments-throws-on-missing-fx-rate
+  (is (thrown? Exception (nav/unfunded-commitments multi-currency-lps-fixture {:base-currency "USD"}))))
+
 (deftest fund-nav-values-a-held-investment-at-cost-when-unmarked
   (let [r (nav/fund-nav {:total-called 2000000 :total-invested-at-cost 2000000
                          :total-exit-proceeds-received 0 :total-distributed-to-lps 0
@@ -146,3 +179,12 @@
                                      :investment-period-years 5
                                      :post-investment-period-rate 0.015})]
       (is (close? 780000.0 (:management-fees-accrued r))))))
+
+(deftest fund-nav-report-converts-lp-currencies-when-fx-options-supplied
+  (testing "demo fixture: lp-1 5,000,000 USD, lp-2 1,000,000 JPY"
+    (let [db (store/seed-db)
+          r (nav/fund-nav-report db {:base-currency "USD" :fx-rates {"JPY" 0.01} :fund-life-years 1})]
+      (is (close? 5010000.0 (:total-commitments (:unfunded r)))
+          "5,000,000 USD + 1,000,000 JPY @ 0.01 -> 5,010,000 USD")
+      (is (close? 100200.0 (:management-fees-accrued r))
+          "fee basis is the FX-converted total commitments: 5,010,000 * 2% * 1y"))))

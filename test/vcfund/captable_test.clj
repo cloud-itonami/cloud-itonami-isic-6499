@@ -129,6 +129,59 @@
                           {:safes [{:id "a" :investment-amount 1 :valuation-cap 1 :discount-rate nil}]
                            :next-round-pre-money-valuation 1 :pre-conversion-shares 0}))))
 
+;; ----------------------------- post-money-multi-safe-conversion-shares -----------------------------
+
+(deftest post-money-multi-safe-conversion-shares-solves-the-circular-system
+  (testing "two post-money SAFEs, ownership-pcts 0.1 and 0.2 -- cross-checked by hand"
+    ;; k = 0.1 + 0.2 = 0.3; post-total = 7,000,000 / (1 - 0.3) = 10,000,000
+    ;; safe-a: 0.1 * 10,000,000 = 1,000,000 new shares
+    ;; safe-b: 0.2 * 10,000,000 = 2,000,000 new shares
+    (let [r (captable/post-money-multi-safe-conversion-shares
+             {:safes [{:id "safe-a" :investment-amount 800000 :valuation-cap 8000000}
+                      {:id "safe-b" :investment-amount 800000 :valuation-cap 4000000}]
+              :pre-conversion-shares 7000000})
+          by-id (into {} (map (juxt :id identity)) (:per-safe r))]
+      (is (close? 0.1 (:ownership-pct (get by-id "safe-a"))))
+      (is (close? 0.2 (:ownership-pct (get by-id "safe-b"))))
+      (is (close? 1000000.0 (:new-shares (get by-id "safe-a"))))
+      (is (close? 2000000.0 (:new-shares (get by-id "safe-b"))))
+      (is (close? 3000000.0 (:total-safe-shares r)))
+      (is (close? 10000000.0 (:post-safe-conversion-shares r)))
+      (is (close? (:post-safe-conversion-shares r)
+                  (+ 7000000.0 (:total-safe-shares r)))
+          "post-conversion total = pre-conversion baseline + all new SAFE shares"))))
+
+(deftest post-money-multi-safe-conversion-shares-single-safe-matches-direct-math
+  (testing "a single post-money SAFE degenerates to the non-circular case: shares = investment/cap * pre/(1-investment/cap)"
+    (let [r (captable/post-money-multi-safe-conversion-shares
+             {:safes [{:id "safe-a" :investment-amount 1000000 :valuation-cap 10000000}]
+              :pre-conversion-shares 9000000})]
+      (is (close? 0.1 (:ownership-pct (first (:per-safe r)))))
+      (is (close? 1000000.0 (:total-safe-shares r)) "9,000,000/(1-0.1) - 9,000,000 = 10,000,000 - 9,000,000")
+      (is (close? 10000000.0 (:post-safe-conversion-shares r))))))
+
+(deftest post-money-multi-safe-conversion-shares-validation-rules
+  (is (thrown? Exception (captable/post-money-multi-safe-conversion-shares
+                          {:safes [] :pre-conversion-shares 1000000})))
+  (is (thrown? Exception (captable/post-money-multi-safe-conversion-shares
+                          {:safes [{:id "a" :investment-amount 100 :valuation-cap 1000}]
+                           :pre-conversion-shares 0})))
+  (is (thrown? Exception (captable/post-money-multi-safe-conversion-shares
+                          {:safes [{:id "a" :investment-amount -1 :valuation-cap 1000}]
+                           :pre-conversion-shares 1000000}))
+      "negative investment-amount")
+  (is (thrown? Exception (captable/post-money-multi-safe-conversion-shares
+                          {:safes [{:id "a" :investment-amount 100 :valuation-cap nil}]
+                           :pre-conversion-shares 1000000}))
+      "cap-only fn -- valuation-cap required"))
+
+(deftest post-money-multi-safe-conversion-shares-rejects-an-oversubscribed-round
+  (testing "combined ownership caps reaching 100% of the company is not a solvable cap table"
+    (is (thrown? Exception (captable/post-money-multi-safe-conversion-shares
+                            {:safes [{:id "a" :investment-amount 6000000 :valuation-cap 10000000}
+                                     {:id "b" :investment-amount 5000000 :valuation-cap 10000000}]
+                             :pre-conversion-shares 1000000})))))
+
 ;; ----------------------------- vesting-schedule -----------------------------
 
 (deftest vesting-schedule-before-cliff-is-zero
