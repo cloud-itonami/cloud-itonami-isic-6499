@@ -907,3 +907,72 @@ pod -- documented as an operator's deployment decision, not code here);
 off upstream `6499` facts (same integration pattern, next steps);
 `6630` does not yet implement carry distribution off `6499`'s exit-
 waterfall `:total-to-gp` figure (same pattern, next step).
+
+## Addendum 12 (2026-07-06, same day, owner-directed): deal `:sector`/`:investment-stage` + `vcfund.concentration`, for `cloud-itonami-isic-6630`'s guideline-disclosure op
+
+By the time of this addendum, `cloud-itonami-isic-6430` had closed BOTH
+remaining gaps Addendum 11 named (distribution recording, NAV
+disclosure) and `cloud-itonami-isic-6630` had closed its carry-
+distribution gap -- leaving exactly ONE documented gap across the whole
+three-actor system: `6630`'s "investment-guideline disclosure (sector/
+stage/concentration limits)". Unlike every prior cross-repo addition,
+this ONE genuinely could not be built by consuming an existing fact --
+this repo held no deal-sector or investment-stage data at ALL (its only
+"stage" concept, `vcfund.pipeline`'s sourcing→ic-review funnel, is
+PROCESS stage, not investment stage like seed/Series A). Asked whether
+to skip the gap, design the missing data model, or pause, the owner
+picked "design the taxonomy, then build it."
+
+- **Minimal, additive deal-model extension**: `vcfund.store`'s deal
+  shape gained two OPTIONAL fields, `:sector` and `:investment-stage`
+  (free-text strings, no closed enum invented -- the same "no single
+  identifier standard, don't invent one" posture `vcfund.registry`/
+  `trustfund.registry` already take toward call/notice numbering). Deals
+  are SEEDED via `with-deals` (there is no governed "create deal" op at
+  all -- deals arrive from an external CRM/sourcing pipeline), so this
+  was a pure schema addition to `deal->tx`/`deal-pull`/`pull->deal`, zero
+  new governed surface. `demo-data`'s three deals were tagged (`ai`/seed,
+  `robotics`/series-a, `fintech`/seed) so downstream tests/demos have a
+  genuine multi-sector portfolio to report on.
+- **New `vcfund.concentration` namespace, deliberately separate from
+  `vcfund.nav`**: `concentration-report` computes what fraction of
+  capital actually deployed (each committed/exited deal's own cost
+  basis, the SAME `:ask-amount` basis `fund-nav-report`'s `investments`
+  list uses) sits in each `:sector`/`:investment-stage`, with an
+  `:unclassified` sentinel bucket for any deal missing either tag (never
+  silently dropped). Read-only reporting, not a governed op -- computing
+  a breakdown moves no capital, the same posture `vcfund.nav` takes.
+  Reuses `vcfund.nav/convert-currency` directly (a within-repo shared
+  utility call, NOT a cross-repo trust concern -- the "independent
+  re-implementation" discipline only applies at the repo boundary where
+  a downstream actor must never trust an upstream actor's self-check).
+- **A genuine two-sided cross-check, unlike NAV disclosure's one-sided
+  carry-through**: `cloud-itonami-isic-6630`'s new `:guideline/disclose`
+  op reads THIS repo's `concentration-report` as an upstream fact and
+  compares its reported fractions against `6630`'s OWN mandate-defined
+  sector/stage caps. Neither repo holds both halves alone -- THIS repo
+  has the actual portfolio composition but no concept of an LPA-
+  authorized limit (that is the management company's own fiduciary
+  record); `6630` has the caps but no deal data of its own to derive a
+  composition from. This is a stronger integration than NAV disclosure's
+  (where `6430` could only carry the upstream figures through
+  unverified) precisely because this addendum gave BOTH sides a fact the
+  other one genuinely lacks.
+- See `cloud-itonami-isic-6630`'s own ADR-0001 for the full design of
+  the downstream `:guideline/disclose` op (registry/store/governor/
+  phase/advisor/sim changes, test/demo scenarios).
+
+Consequences: `vcfund`'s test suite grew from 165 tests/632 assertions
+to 170 tests/646 assertions (a new `vcfund.concentration-test` covering
+the empty-portfolio, multi-sector-split, `:unclassified`-grouping,
+un-committed-deal-exclusion and FX-conversion cases), still lint-clean,
+demo unaffected (a purely additive deal-schema change; no existing
+caller reads `:sector`/`:investment-stage`). `cloud-itonami-isic-6630`
+went from 41 tests/166 assertions to 52 tests/220 assertions. This
+closes the LAST documented gap across the three-actor system --
+`cloud-itonami-isic-6430`'s and `cloud-itonami-isic-6630`'s own
+`docs/business-model.md` Offer lists are now both fully covered by a
+governed op. Remaining honest gaps are all deliberately out-of-scope
+(real transport between the three actors, real banking/tax/regulatory
+integration -- see each repo's own coverage tables), not gaps this
+addendum overlooked.

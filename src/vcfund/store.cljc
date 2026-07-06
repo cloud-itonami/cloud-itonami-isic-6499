@@ -72,13 +72,16 @@
    :deals
    {"deal-1" {:id "deal-1" :portfolio-company "Acme AI, Inc." :founders ["party-1" "party-2"]
               :jurisdiction "USA" :ask-amount 2000000 :currency "USD"
-              :security-type :safe :status :sourced}
+              :security-type :safe :status :sourced
+              :sector "ai" :investment-stage "seed"}
     "deal-2" {:id "deal-2" :portfolio-company "Orbit Robotics KK" :founders ["party-1"]
               :jurisdiction "ATL" :ask-amount 500000 :currency "USD"
-              :security-type :priced-equity :status :sourced}
+              :security-type :priced-equity :status :sourced
+              :sector "robotics" :investment-stage "series-a"}
     "deal-3" {:id "deal-3" :portfolio-company "Shady Corp" :founders ["party-3"]
               :jurisdiction "USA" :ask-amount 300000 :currency "USD"
-              :security-type :convertible-note :status :sourced}}
+              :security-type :convertible-note :status :sourced
+              :sector "fintech" :investment-stage "seed"}}
    :parties
    {"party-1" {:id "party-1" :name "Jane Founder" :role :founder :sanctions-hit? false :id-doc "passport-us-****1234"}
     "party-2" {:id "party-2" :name "John Cofounder" :role :founder :sanctions-hit? false :id-doc "passport-us-****5678"}
@@ -404,7 +407,8 @@
      :wallet-address (:lp/wallet-address m)}))
 
 (defn- deal->tx [{:keys [id portfolio-company founders jurisdiction ask-amount
-                        currency security-type status commitment-number]}]
+                        currency security-type status commitment-number
+                        sector investment-stage]}]
   (cond-> {:deal/id id}
     portfolio-company (assoc :deal/portfolio-company portfolio-company)
     founders          (assoc :deal/founders (enc founders))
@@ -413,11 +417,14 @@
     currency          (assoc :deal/currency currency)
     security-type     (assoc :deal/security-type (enc security-type))
     status            (assoc :deal/status (enc status))
-    commitment-number (assoc :deal/commitment-number commitment-number)))
+    commitment-number (assoc :deal/commitment-number commitment-number)
+    sector            (assoc :deal/sector sector)
+    investment-stage  (assoc :deal/investment-stage investment-stage)))
 
 (def ^:private deal-pull
   [:deal/id :deal/portfolio-company :deal/founders :deal/jurisdiction :deal/ask-amount
-   :deal/currency :deal/security-type :deal/status :deal/commitment-number])
+   :deal/currency :deal/security-type :deal/status :deal/commitment-number
+   :deal/sector :deal/investment-stage])
 
 (defn- pull->deal [m]
   (when (:deal/id m)
@@ -425,7 +432,8 @@
      :founders (or (dec* (:deal/founders m)) [])
      :jurisdiction (:deal/jurisdiction m) :ask-amount (:deal/ask-amount m)
      :currency (:deal/currency m) :security-type (dec* (:deal/security-type m))
-     :status (dec* (:deal/status m)) :commitment-number (:deal/commitment-number m)}))
+     :status (dec* (:deal/status m)) :commitment-number (:deal/commitment-number m)
+     :sector (:deal/sector m) :investment-stage (:deal/investment-stage m)}))
 
 (defn- party->tx [{:keys [id name role sanctions-hit? id-doc]}]
   (cond-> {:party/id id}

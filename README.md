@@ -165,14 +165,21 @@ register-capital-call`'s return value already IS the upstream fact
 `trustfund.governor` ingests and independently re-verifies (recomputing
 the SAME pro-rata math from its OWN subscription ledger -- a deliberately
 SEPARATE re-implementation, not a shared-library call, so a bug on one
-side can't silently defeat the other side's check). The one addition:
+side can't silently defeat the other side's check). One addition:
 `fund-nav-report`'s return now also exposes `:fee-basis`/`:annual-fee-
 rate`/`:years-elapsed` (previously internal-only) so `cloud-itonami-isic-
 6630`'s `fundmgmt.governor` can independently recompute the fee accrual
 and check the claimed rate against its own recorded LPA fee-cap mandate
--- purely additive, every existing caller unaffected. See
-`docs/adr/0001-architecture.md` Addendum 11, and `cloud-itonami-isic-
-6430`/`6630`'s own READMEs and ADRs, for the full design.
+-- purely additive, every existing caller unaffected. A second addition:
+each deal record gained OPTIONAL `:sector`/`:investment-stage` fields,
+and a new `vcfund.concentration/concentration-report` adapter computes
+what fraction of deployed capital sits in each -- the upstream fact
+`cloud-itonami-isic-6630`'s `fundmgmt.governor` compares against its OWN
+mandate-defined sector/stage concentration caps before disclosing
+guideline compliance (neither repo holds both halves of that check
+alone). See `docs/adr/0001-architecture.md` Addenda 11/12, and
+`cloud-itonami-isic-6430`/`6630`'s own READMEs and ADRs, for the full
+design.
 
 ## Run
 
@@ -222,12 +229,13 @@ the same "self-contained sibling" relationship `cloud-itonami-isic-6511`'s
 
 | File | Role |
 |---|---|
-| `src/vcfund/store.cljc` | **Store** protocol -- `MemStore` ‖ `DatomicStore` (`langchain.db`) + append-only audit ledger + capital-call/investment/follow-on/distribution/clawback-repayment/portfolio-report/board-seat/term-sheet/signature history; LPs carry an optional `:wallet-address` |
+| `src/vcfund/store.cljc` | **Store** protocol -- `MemStore` ‖ `DatomicStore` (`langchain.db`) + append-only audit ledger + capital-call/investment/follow-on/distribution/clawback-repayment/portfolio-report/board-seat/term-sheet/signature history; LPs carry an optional `:wallet-address`, deals carry optional `:sector`/`:investment-stage` |
 | `src/vcfund/registry.cljc` | Capital-call pro-rata allocation + investment-commitment (initial + follow-on, referencing the original commitment number) draft records (`:safe`/`:convertible-note`/`:priced-equity`/`:saft`) + exit-distribution waterfall calc (deal-by-deal, documented limitation) + GP-clawback-repayment draft + portfolio-report + board-seat/governance-rights event drafts + `current-board-seats` roster projection + versioned term-sheet drafts + `term-sheet-diff` redline + e-signature drafts + `fully-executed?` |
 | `src/vcfund/pipeline.cljc` | Pure deal-pipeline funnel model (sourcing → screening → pitched → term-sheet → dd → ic-review), forward-only transitions, `:committed`/`:exited` reachable only via the real capital ops |
 | `src/vcfund/captable.cljc` | Pure SAFE/SAFT conversion (pre-money multi-SAFE AND post-money multi-SAFE circular-ownership closed-form solve), priced-round ownership/dilution (percentage AND absolute share-count terms), option-pool-shuffle, vesting schedules + change-of-control acceleration (single/double-trigger), option-exercise economics AND `option-exercise-tax-treatment` (federal ISO-vs-NSO exercise-time distinction; ISO's AMT preference item, not computed liability) (see docstring for what it deliberately does NOT model) |
 | `src/vcfund/nav.cljc` | Pure whole-fund NAV + unfunded-commitment + management-fee-accrual (optional investment-period step-down) + PER-LP capital-account (`lp-capital-account`, pro-rata by commitment share) calculator, plus store-aware `fund-nav-report`/`lp-capital-account-report` adapters (the latter calls the former internally, so the two always reconcile) -- OPTIONAL multi-currency `convert-currency`/`:base-currency`/`:fx-rates` on LP-level commitment/called amounts AND held-deal cost-basis/fair-value-mark (see docstring for what's still single-currency) |
 | `src/vcfund/waterfall.cljc` | Pure whole-fund (European-style) waterfall reconciliation + GP-clawback calculator, plus a store-aware `whole-fund-waterfall-report` adapter |
+| `src/vcfund/concentration.cljc` | Read-only portfolio-concentration reporting -- committed-deal capital by `:sector`/`:investment-stage`, OPTIONAL multi-currency conversion, an `:unclassified` bucket for deals missing either tag; the upstream fact `cloud-itonami-isic-6630`'s guideline-disclosure op cross-checks against its own mandate caps |
 | `src/vcfund/facts.cljc` | Per-jurisdiction fund-formation/exemption-regime catalog with an official spec-basis citation per entry, honest coverage reporting |
 | `src/vcfund/ddllm.cljc` | **DD-LLM Advisor** -- `mock-advisor` ‖ `llm-advisor`; LP-intake/DD/KYC/stage-advance/term-sheet-propose(+redline)/term-sheet-sign/capital-call/commitment/follow-on/portfolio-report/board-seat/distribution/clawback-repayment proposals |
 | `src/vcfund/governor.cljc` | **InvestmentCommitteeGovernor** -- 15 HARD checks + 1 soft: spec-basis · sanctions hold · DD-complete · stage-insufficient · stage-transition · term-sheet-missing · term-sheet-not-executed · term-sheet-after-commitment · accredited-investor · capital-call overcall · portfolio-report-requires-commitment · follow-on-requires-prior-commitment · commitment-missing · clawback-exceeds-entitlement · board-seat-requires-commitment · confidence/quadruple-actuation gate |
@@ -261,6 +269,7 @@ fund-administration coverage:
 | Whole-fund (European-style) waterfall reconciliation + a real, governed GP-clawback REPAYMENT act (`:waterfall/clawback-repay`, HARD-gated on the requested amount never exceeding the INDEPENDENTLY recomputed `vcfund.waterfall/whole-fund-waterfall-report` entitlement -- the governor never trusts the proposal's self-reported figure) | |
 | Exit-proceeds waterfall (deal-by-deal: return of capital → preferred return → GP carry -- what actually pays out; `vcfund.waterfall` reconciles against it, doesn't replace it) | |
 | Crypto-native: `:saft` security type, `vcfund.captable/saft-conversion` (token-allocation-% math), LP `:wallet-address` for on-chain settlement (see "Crypto-native operation") | |
+| Portfolio-concentration reporting by `:sector`/`:investment-stage` across committed deals, OPTIONAL multi-currency FX (`vcfund.concentration/concentration-report`; the upstream fact `cloud-itonami-isic-6630`'s guideline-disclosure op cross-checks against its own mandate caps) | |
 | Immutable audit ledger for every call/commit/follow-on/report/board-seat/distribute/clawback-repay/term-sheet/signature decision | |
 
 Extending coverage is additive, the same discipline as jurisdiction
