@@ -42,6 +42,7 @@
   (distribution-history [s] "the append-only exit-distribution history (vcfund.registry drafts)")
   (portfolio-reports-of [s deal-id] "the append-only KPI-report history for one deal, oldest first")
   (term-sheet-history-of [s deal-id] "the append-only versioned term-sheet negotiation history for one deal, oldest first")
+  (signature-history-of [s deal-id] "the append-only term-sheet e-signature history for one deal, oldest first")
   (next-sequence [s jurisdiction] "next commitment-number sequence for a jurisdiction")
   (call-sequence [s jurisdiction] "next capital-call-number sequence for a jurisdiction")
   (commit-record! [s record] "apply a committed op's record to the SSoT")
@@ -60,7 +61,8 @@
   []
   {:lps
    {"lp-1" {:id "lp-1" :name "Sequoia Fund of Funds" :commitment-amount 5000000
-            :called-amount 0 :currency "USD" :jurisdiction "USA" :accredited? true :status :active}
+            :called-amount 0 :currency "USD" :jurisdiction "USA" :accredited? true :status :active
+            :wallet-address "0x71C7656EC7ab88b098defB751B7401B5f6d8976"}
     "lp-2" {:id "lp-2" :name "個人LP 山田太郎" :commitment-amount 1000000
             :called-amount 0 :currency "JPY" :jurisdiction "JPN" :accredited? true :status :active}}
    :deals
@@ -146,6 +148,7 @@
   (distribution-history [_] (:distribution-history @a))
   (portfolio-reports-of [_ deal-id] (get-in @a [:portfolio-reports deal-id] []))
   (term-sheet-history-of [_ deal-id] (get-in @a [:term-sheets deal-id] []))
+  (signature-history-of [_ deal-id] (get-in @a [:term-sheet-signatures deal-id] []))
   (next-sequence [_ jurisdiction]
     (get-in @a [:sequences jurisdiction] 0))
   (call-sequence [_ jurisdiction]
@@ -170,6 +173,13 @@
             version (count (get-in @a [:term-sheets deal-id] []))
             result (registry/register-term-sheet deal-id proposed-by terms version)]
         (swap! a update-in [:term-sheets deal-id] (fnil registry/append []) result)
+        result)
+
+      :term-sheet/signed
+      (let [deal-id (first path)
+            {:keys [version signed-by]} payload
+            result (registry/register-term-sheet-signature deal-id version signed-by)]
+        (swap! a update-in [:term-sheet-signatures deal-id] (fnil registry/append []) result)
         result)
 
       :portfolio/report-logged
@@ -225,7 +235,7 @@
                            :assessments {} :kyc {} :ledger [] :sequences {} :call-sequences {}
                            :commitments {} :commitment-history []
                            :capital-call-history [] :distribution-history []
-                           :portfolio-reports {} :term-sheets {}))))
+                           :portfolio-reports {} :term-sheets {} :term-sheet-signatures {}))))
 
 ;; ----------------------------- DatomicStore (langchain.db) -----------------------------
 
@@ -248,7 +258,8 @@
    :sequence/jurisdiction {:db/unique :db.unique/identity}
    :call-sequence/jurisdiction {:db/unique :db.unique/identity}
    :portfolio-report/seq {:db/unique :db.unique/identity}
-   :term-sheet/seq {:db/unique :db.unique/identity}})
+   :term-sheet/seq {:db/unique :db.unique/identity}
+   :term-sheet-signature/seq {:db/unique :db.unique/identity}})
 
 (defn- enc [v] (pr-str v))
 (defn- dec* [s] (when s (edn/read-string s)))
@@ -268,7 +279,14 @@
   [conn]
   (count (d/q '[:find [?s ...] :where [?e :term-sheet/seq ?s]] (d/db conn))))
 
-(defn- lp->tx [{:keys [id name commitment-amount called-amount currency jurisdiction accredited? status]}]
+(defn- term-sheet-signature-count
+  "Global count of term-sheet-signature entities across ALL deals -- same
+  `:ledger/seq`-style global-identity convention as `term-sheet-count`."
+  [conn]
+  (count (d/q '[:find [?s ...] :where [?e :term-sheet-signature/seq ?s]] (d/db conn))))
+
+(defn- lp->tx [{:keys [id name commitment-amount called-amount currency jurisdiction
+                       accredited? status wallet-address]}]
   (cond-> {:lp/id id}
     name              (assoc :lp/name name)
     commitment-amount (assoc :lp/commitment-amount commitment-amount)
@@ -276,18 +294,20 @@
     currency          (assoc :lp/currency currency)
     jurisdiction       (assoc :lp/jurisdiction jurisdiction)
     (some? accredited?) (assoc :lp/accredited? accredited?)
-    status            (assoc :lp/status status)))
+    status            (assoc :lp/status status)
+    wallet-address    (assoc :lp/wallet-address wallet-address)))
 
 (def ^:private lp-pull
   [:lp/id :lp/name :lp/commitment-amount :lp/called-amount :lp/currency :lp/jurisdiction
-   :lp/accredited? :lp/status])
+   :lp/accredited? :lp/status :lp/wallet-address])
 
 (defn- pull->lp [m]
   (when (:lp/id m)
     {:id (:lp/id m) :name (:lp/name m) :commitment-amount (:lp/commitment-amount m)
      :called-amount (or (:lp/called-amount m) 0)
      :currency (:lp/currency m) :jurisdiction (:lp/jurisdiction m)
-     :accredited? (boolean (:lp/accredited? m)) :status (:lp/status m)}))
+     :accredited? (boolean (:lp/accredited? m)) :status (:lp/status m)
+     :wallet-address (:lp/wallet-address m)}))
 
 (defn- deal->tx [{:keys [id portfolio-company founders jurisdiction ask-amount
                         currency security-type status commitment-number]}]
@@ -387,6 +407,14 @@
               (d/db conn) deal-id)
          (sort-by first)
          (mapv (comp dec* second))))
+  (signature-history-of [_ deal-id]
+    (->> (d/q '[:find ?s ?r :in $ ?did
+               :where [?e :term-sheet-signature/deal-id ?did]
+                      [?e :term-sheet-signature/seq ?s]
+                      [?e :term-sheet-signature/record ?r]]
+              (d/db conn) deal-id)
+         (sort-by first)
+         (mapv (comp dec* second))))
   (next-sequence [_ jurisdiction]
     (or (d/q '[:find ?n . :in $ ?j
               :where [?e :sequence/jurisdiction ?j] [?e :sequence/next ?n]]
@@ -419,6 +447,15 @@
         (d/transact! conn [{:term-sheet/seq (term-sheet-count conn)
                            :term-sheet/deal-id deal-id
                            :term-sheet/record (enc (get result "record"))}])
+        result)
+
+      :term-sheet/signed
+      (let [deal-id (first path)
+            {:keys [version signed-by]} payload
+            result (registry/register-term-sheet-signature deal-id version signed-by)]
+        (d/transact! conn [{:term-sheet-signature/seq (term-sheet-signature-count conn)
+                           :term-sheet-signature/deal-id deal-id
+                           :term-sheet-signature/record (enc (get result "record"))}])
         result)
 
       :portfolio/report-logged

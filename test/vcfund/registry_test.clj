@@ -31,6 +31,11 @@
       (is (thrown? Exception
                    (r/register-commitment company security-type amount jurisdiction 1))))))
 
+(deftest commitment-accepts-saft-for-crypto-native-funds
+  (testing "a fund investing in a token deal via a SAFT (Simple Agreement for Future Tokens)"
+    (let [result (r/register-commitment "Acme Protocol Labs" :saft 500000 "USA" 1)]
+      (is (= (get-in result ["record" "security_type"]) "saft")))))
+
 ;; ----------------------------- term sheets -----------------------------
 
 (deftest term-sheet-is-a-draft-with-no-certificate
@@ -60,6 +65,41 @@
     (is (= 2 (count hist2)))
     (is (= 0 (get-in hist2 [0 "version"])))
     (is (= 1 (get-in hist2 [1 "version"])))))
+
+(deftest term-sheet-diff-classifies-added-removed-changed
+  (let [d (r/term-sheet-diff {:valuation 6000000 :board-seat false :pro-rata-rights true}
+                             {:valuation 8000000 :board-seat false :liquidation-preference 1.0})]
+    (is (= {:from 6000000 :to 8000000} (get-in d [:changed :valuation])) "changed value")
+    (is (= 1.0 (get-in d [:added :liquidation-preference])) "new key")
+    (is (= true (get-in d [:removed :pro-rata-rights])) "dropped key")
+    (is (not (contains? (:changed d) :board-seat)) "unchanged key omitted entirely")))
+
+(deftest term-sheet-diff-validation-rules
+  (is (thrown? Exception (r/term-sheet-diff "not-a-map" {})))
+  (is (thrown? Exception (r/term-sheet-diff {} "not-a-map"))))
+
+(deftest term-sheet-signature-is-a-draft-with-no-certificate
+  (let [result (r/register-term-sheet-signature "deal-1" 0 :fund)]
+    (is (nil? (get result "certificate")))
+    (is (= (get-in result ["record" "record_id"]) "deal-1#term-sheet-v0#signed-by-fund"))
+    (is (= (get-in result ["record" "kind"]) "term-sheet-signature"))
+    (is (= (get-in result ["record" "version"]) 0))
+    (is (= (get-in result ["record" "signed_by"]) "fund"))))
+
+(deftest term-sheet-signature-validation-rules
+  (is (thrown? Exception (r/register-term-sheet-signature "" 0 :fund)))
+  (is (thrown? Exception (r/register-term-sheet-signature "deal-1" -1 :fund)))
+  (is (thrown? Exception (r/register-term-sheet-signature "deal-1" 0 :investor))))
+
+(deftest fully-executed-requires-both-signers-on-the-same-version
+  (let [fund-v0 (get (r/register-term-sheet-signature "deal-1" 0 :fund) "record")
+        founder-v0 (get (r/register-term-sheet-signature "deal-1" 0 :founder) "record")
+        fund-v1 (get (r/register-term-sheet-signature "deal-1" 1 :fund) "record")]
+    (is (not (r/fully-executed? [] 0)) "no signatures at all")
+    (is (not (r/fully-executed? [fund-v0] 0)) "only one side signed")
+    (is (r/fully-executed? [fund-v0 founder-v0] 0) "both sides signed the same version")
+    (is (not (r/fully-executed? [fund-v1 founder-v0] 0))
+        "signatures on DIFFERENT versions never count as executing either one")))
 
 ;; ----------------------------- capital calls -----------------------------
 

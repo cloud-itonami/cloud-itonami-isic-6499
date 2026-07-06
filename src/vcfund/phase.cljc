@@ -31,14 +31,15 @@
   InvestmentCommitteeGovernor's `:actuation/call`/`:actuation/deploy`/
   `:actuation/distribute` high-stakes gate (`vcfund.governor`) enforces the
   same invariant independently -- two layers, not one, agree on this.
-  `:deal/advance-stage`, `:term-sheet/propose` and `:portfolio/report`
-  move no capital (governed by HARD checks in `vcfund.governor`, but never
-  `high-stakes`), so they ARE auto-eligible at phase 3 -- a deliberately
-  lighter touch matching their actual risk.")
+  `:deal/advance-stage`, `:term-sheet/propose`, `:term-sheet/sign` and
+  `:portfolio/report` move no capital (governed by HARD checks in
+  `vcfund.governor`, but never `high-stakes`), so they ARE auto-eligible at
+  phase 3 -- a deliberately lighter touch matching their actual risk.")
 
 (def read-ops  #{:coverage/report})
 (def write-ops #{:lp/intake :kyc/screen :dd/assess :deal/advance-stage :term-sheet/propose
-                 :capital-call/issue :investment/commit :portfolio/report :exit/distribute})
+                 :term-sheet/sign :capital-call/issue :investment/commit
+                 :portfolio/report :exit/distribute})
 
 ;; NOTE the invariant: `:capital-call/issue`, `:investment/commit` and
 ;; `:exit/distribute` are members of `write-ops` (governor-gated like any
@@ -51,7 +52,8 @@
    1 {:label "assisted-intake" :writes #{:lp/intake}                                              :auto #{}}
    2 {:label "assisted-dd"     :writes #{:lp/intake :dd/assess :kyc/screen}                       :auto #{}}
    3 {:label "supervised-auto" :writes write-ops
-      :auto #{:lp/intake :deal/advance-stage :term-sheet/propose :portfolio/report}}})
+      :auto #{:lp/intake :deal/advance-stage :term-sheet/propose
+             :term-sheet/sign :portfolio/report}}})
 
 (def default-phase 3)
 

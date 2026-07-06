@@ -365,3 +365,73 @@ workflow, vesting/option-strike/multi-SAFE proration, a dedicated
 follow-on-investment op, board-seat/governance-rights administration,
 management-fee step-downs, multi-currency FX, an actual GP-clawback
 repayment op, tax/regulatory reporting.
+
+## Addendum 5 (2026-07-06, same day, owner-directed): term-sheet e-signature/redlining, cap-table vesting/option/multi-SAFE math, crypto-native SAFT support
+
+The owner picked the first two remaining items from Addendum 4's list
+("1, 2") plus a cross-cutting instruction: the fund itself should be
+able to operate in crypto.
+
+- **Term-sheet redlining** -- `vcfund.registry/term-sheet-diff` (new,
+  pure): field-level added/removed/changed classification between two
+  `terms` maps. `vcfund.ddllm/propose-term-sheet` now includes the
+  redline against the immediately prior round in its `:rationale` when
+  one exists, so a human reviewing a counter-proposal sees exactly what
+  changed, not just the new terms in isolation.
+- **Term-sheet e-signature** -- new op `:term-sheet/sign` (subject =
+  deal-id, `:signed-by` `:fund`/`:founder`), append-only per-deal
+  signature history (`vcfund.store/signature-history-of`,
+  `vcfund.registry/register-term-sheet-signature`, parallel to the
+  term-sheet history itself -- signing never mutates the term-sheet
+  record it signs). `vcfund.registry/fully-executed?` checks whether BOTH
+  sides signed a SPECIFIC version (signatures on different versions never
+  count as executing either one). **New HARD check,
+  `term-sheet-not-executed-violations`** -- `:investment/commit` now
+  requires the LATEST term-sheet version to be fully executed, not merely
+  proposed (`term-sheet-missing-violations` still separately catches the
+  zero-term-sheet case). `:term-sheet/sign` is NOT `high-stakes` (no
+  capital moves) -- auto-eligible at phase 3. Every existing test/demo
+  path reaching `:investment/commit` needed both-sides signature steps
+  added -- the same "close a real gap, then fix every call site"
+  discipline as the `:ic-review`/term-sheet-missing requirements in
+  Addenda 2/3.
+- **Cap-table math extended** (`vcfund.captable`) -- `vesting-schedule`
+  (linear-with-cliff, the standard 4-year/1-year-cliff shape),
+  `option-exercise-economics` (intrinsic value, floors at 0 for
+  underwater options), `multi-safe-conversion-shares` (multiple SAFEs
+  converting into the SAME priced round, each at its OWN most-favorable
+  cap-vs-discount price against a shared `pre-conversion-shares`
+  baseline -- verified against a two-SAFE scenario with a hand
+  cross-check).
+- **Crypto-native operation**: `:saft` (Simple Agreement for Future
+  Tokens) added to `register-commitment`'s valid `:security-type` set;
+  `vcfund.captable/saft-conversion` is a thin re-labeling wrapper around
+  `safe-conversion` (same cap-vs-discount mechanic, denominated in token
+  supply instead of equity -- `:token-allocation-pct` in place of
+  `:ownership-pct`, not a duplicated implementation). LPs gained an
+  optional `:wallet-address` field (`vcfund.store`, both backends) for
+  on-chain capital-call/distribution settlement; the demo fixture's
+  `lp-1` carries one. No new governed op or HARD check was needed for
+  wallet-based sanctions screening: `:kyc/screen` and the party `:id-doc`
+  field were already generic identifier fields, so a wallet address
+  screens through the exact same mechanism a passport number does.
+  Currency fields were already free-form strings, so a stablecoin base
+  currency (e.g. `"USDC"`) needs no code change either -- only
+  cross-currency FX conversion remains unmodeled (documented, unchanged
+  limitation of `vcfund.nav`/`vcfund.waterfall`).
+
+Consequences: `test/vcfund/*` grew from 92 tests/373 assertions to 112
+tests/439 assertions (new signature/diff/vesting/option/multi-SAFE/SAFT
+tests across `governor_contract_test.clj`, `registry_test.clj`,
+`captable_test.clj` and `store_contract_test.clj`), still lint-clean;
+demo (`clojure -M:dev:run`) walks the full lifecycle including both-sides
+term-sheet signing and a multi-violation HARD hold (a deal with DD
+incomplete, stage insufficient, AND an unsigned term sheet all at once,
+printed together -- the governor reports every violation, not just the
+first). Remaining honest gaps (tracked in README's "Business-process
+coverage" table): a real e-signature PROVIDER integration and
+redlining UI, order-dependent multi-SAFE simultaneous-conversion solving,
+a dedicated follow-on-investment op, board-seat/governance-rights
+administration, management-fee step-downs, vesting acceleration/option
+tax treatment, multi-currency FX, an actual GP-clawback repayment op,
+tax/regulatory reporting.

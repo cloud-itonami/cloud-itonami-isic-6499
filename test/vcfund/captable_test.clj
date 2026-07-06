@@ -40,6 +40,16 @@
   (is (thrown? Exception (captable/safe-conversion {:investment-amount 1 :valuation-cap 1
                                                     :discount-rate 1.5 :next-round-pre-money-valuation 1}))))
 
+;; ----------------------------- saft-conversion (crypto) -----------------------------
+
+(deftest saft-conversion-mirrors-safe-conversion-in-token-terms
+  (testing "same cap-vs-discount mechanic as safe-conversion, denominated in token supply"
+    (let [r (captable/saft-conversion {:investment-amount 500000 :token-valuation-cap 8000000
+                                       :discount-rate 0.20 :tge-fully-diluted-valuation 12000000})]
+      (is (= :cap (:basis r)))
+      (is (close? 8000000.0 (:conversion-valuation r)))
+      (is (close? (/ 500000.0 8500000.0) (:token-allocation-pct r))))))
+
 (deftest priced-round-ownership-computes-post-money-and-dilution
   (let [r (captable/priced-round-ownership {:investment-amount 2000000 :pre-money-valuation 8000000})]
     (is (close? 10000000.0 (:post-money-valuation r)))
@@ -92,3 +102,75 @@
 
 (deftest cap-table-ownership-validation-rules
   (is (thrown? Exception (captable/cap-table-ownership []))))
+
+;; ----------------------------- multi-safe-conversion-shares -----------------------------
+
+(deftest multi-safe-conversion-shares-each-converts-at-its-own-price
+  (testing "two SAFEs with different cap/discount terms, each converting independently"
+    ;; SAFE A: cap 8M vs discount 12M*0.8=9.6M -> cap wins -> $1.00/share, 500,000 new shares.
+    ;; SAFE B: cap 5M vs discount 9.6M -> cap wins -> $0.625/share, 480,000 new shares.
+    (let [r (captable/multi-safe-conversion-shares
+             {:safes [{:id "safe-a" :investment-amount 500000 :valuation-cap 8000000 :discount-rate 0.20}
+                      {:id "safe-b" :investment-amount 300000 :valuation-cap 5000000 :discount-rate 0.20}]
+              :next-round-pre-money-valuation 12000000
+              :pre-conversion-shares 8000000})
+          by-id (into {} (map (juxt :id identity)) (:per-safe r))]
+      (is (close? 1.0 (:price-per-share (get by-id "safe-a"))))
+      (is (close? 500000.0 (:new-shares (get by-id "safe-a"))))
+      (is (close? 0.625 (:price-per-share (get by-id "safe-b"))))
+      (is (close? 480000.0 (:new-shares (get by-id "safe-b"))))
+      (is (close? 980000.0 (:total-safe-shares r)))
+      (is (close? 8980000.0 (:post-safe-conversion-shares r))))))
+
+(deftest multi-safe-conversion-shares-validation-rules
+  (is (thrown? Exception (captable/multi-safe-conversion-shares
+                          {:safes [] :next-round-pre-money-valuation 1 :pre-conversion-shares 1})))
+  (is (thrown? Exception (captable/multi-safe-conversion-shares
+                          {:safes [{:id "a" :investment-amount 1 :valuation-cap 1 :discount-rate nil}]
+                           :next-round-pre-money-valuation 1 :pre-conversion-shares 0}))))
+
+;; ----------------------------- vesting-schedule -----------------------------
+
+(deftest vesting-schedule-before-cliff-is-zero
+  (let [r (captable/vesting-schedule {:total-shares 48000 :vesting-months 48 :cliff-months 12 :months-elapsed 6})]
+    (is (false? (:cliff-reached? r)))
+    (is (close? 0.0 (:vested-shares r)))))
+
+(deftest vesting-schedule-lump-sums-at-the-cliff
+  (let [r (captable/vesting-schedule {:total-shares 48000 :vesting-months 48 :cliff-months 12 :months-elapsed 12})]
+    (is (true? (:cliff-reached? r)))
+    (is (close? 12000.0 (:vested-shares r)) "12/48 of the grant vests at the 1-year cliff")
+    (is (close? 0.25 (:vested-pct r)))))
+
+(deftest vesting-schedule-linear-after-the-cliff
+  (let [r (captable/vesting-schedule {:total-shares 48000 :vesting-months 48 :cliff-months 12 :months-elapsed 36})]
+    (is (close? 36000.0 (:vested-shares r)))
+    (is (close? 0.75 (:vested-pct r)))))
+
+(deftest vesting-schedule-caps-at-fully-vested
+  (let [r (captable/vesting-schedule {:total-shares 48000 :vesting-months 48 :cliff-months 12 :months-elapsed 100})]
+    (is (close? 48000.0 (:vested-shares r)))
+    (is (close? 1.0 (:vested-pct r)))))
+
+(deftest vesting-schedule-validation-rules
+  (is (thrown? Exception (captable/vesting-schedule {:total-shares -1 :vesting-months 48 :cliff-months 12 :months-elapsed 1})))
+  (is (thrown? Exception (captable/vesting-schedule {:total-shares 1 :vesting-months 0 :cliff-months 0 :months-elapsed 1})))
+  (is (thrown? Exception (captable/vesting-schedule {:total-shares 1 :vesting-months 48 :cliff-months 60 :months-elapsed 1})))
+  (is (thrown? Exception (captable/vesting-schedule {:total-shares 1 :vesting-months 48 :cliff-months 12 :months-elapsed -1}))))
+
+;; ----------------------------- option-exercise-economics -----------------------------
+
+(deftest option-exercise-economics-computes-intrinsic-value
+  (let [r (captable/option-exercise-economics {:shares 10000 :strike-price 0.50 :fmv-per-share 3.00})]
+    (is (close? 5000.0 (:exercise-cost r)))
+    (is (close? 30000.0 (:market-value r)))
+    (is (close? 25000.0 (:intrinsic-value r)))))
+
+(deftest option-exercise-economics-underwater-options-floor-at-zero
+  (let [r (captable/option-exercise-economics {:shares 10000 :strike-price 3.00 :fmv-per-share 0.50})]
+    (is (close? 0.0 (:intrinsic-value r)) "underwater -- nobody exercises for a loss")))
+
+(deftest option-exercise-economics-validation-rules
+  (is (thrown? Exception (captable/option-exercise-economics {:shares -1 :strike-price 1 :fmv-per-share 1})))
+  (is (thrown? Exception (captable/option-exercise-economics {:shares 1 :strike-price -1 :fmv-per-share 1})))
+  (is (thrown? Exception (captable/option-exercise-economics {:shares 1 :strike-price 1 :fmv-per-share -1}))))

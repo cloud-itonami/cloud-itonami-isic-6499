@@ -8,13 +8,14 @@
   UnderwritingGovernor, `cloud-itonami-M6910`'s RegistrarGovernor and
   `cloud-itonami-L6810`'s RealtorGovernor.
 
-  Eleven checks, in priority order. The first ten are HARD violations: a
+  Twelve checks, in priority order. The first eleven are HARD violations: a
   human approver CANNOT override them (you don't get to approve your way
   past a sanctions hit, a fabricated fund-formation spec-basis, incomplete
   DD, an LP missing an accredited-investor affirmation, a capital call
   that would overcall an LP past their commitment, an illegal pipeline-
-  stage transition, a commit attempted before Investment Committee review
-  or before any term sheet was ever proposed, a term sheet proposed after
+  stage transition, a commit attempted before Investment Committee review,
+  before any term sheet was ever proposed, or before the latest term sheet
+  is FULLY EXECUTED (both sides signed), a term sheet proposed after
   capital is already committed, or a portfolio report on a deal that was
   never actually committed). The last is SOFT: it asks a human to look
   (low confidence / actuation), and the human may approve -- but see
@@ -22,9 +23,9 @@
   `:exit/distribute` (real capital movement, in any of the three
   directions) NO phase ever allows auto-commit either. Two independent
   layers agree that all three directions of actuation are always a human
-  call. `:deal/advance-stage`, `:term-sheet/propose` and
-  `:portfolio/report` are NOT actuation (no capital moves) and so are NOT
-  high-stakes -- they may auto-commit when clean, a deliberately
+  call. `:deal/advance-stage`, `:term-sheet/propose`, `:term-sheet/sign`
+  and `:portfolio/report` are NOT actuation (no capital moves) and so are
+  NOT high-stakes -- they may auto-commit when clean, a deliberately
   lighter-touch posture matching their actual (low) risk.
 
     1.  Spec-basis        -- did the DD proposal cite an OFFICIAL
@@ -48,26 +49,32 @@
                              (`vcfund.registry/register-term-sheet`)? No
                              capital moves on a handshake with no term
                              sheet on file, ever.
-    7.  Term sheet after commitment -- for `:term-sheet/propose`, is the
+    7.  Term sheet not executed -- for an investment commitment, is the
+                             LATEST term-sheet version FULLY EXECUTED --
+                             both `:fund` and `:founder` signed THAT
+                             version (`vcfund.registry/fully-executed?`)?
+                             A proposed-but-unsigned term sheet is not
+                             enough to wire real capital.
+    8.  Term sheet after commitment -- for `:term-sheet/propose`, is the
                              deal already `:committed`/`:exited`?
                              Negotiation happens pre-commitment only.
-    8.  Accredited investor -- for a capital call or investment commitment,
+    9.  Accredited investor -- for a capital call or investment commitment,
                              does every LP in the fund have a recorded
                              accredited-investor/QP affirmation? (fund-wide:
                              the whole vehicle's exemption depends on every
                              investor qualifying, not just the one deal.)
-    9.  Capital-call overcall -- does the requested call amount, allocated
+    10. Capital-call overcall -- does the requested call amount, allocated
                              pro-rata by commitment share
                              (`vcfund.registry/capital-call-allocations`),
                              push any LP's cumulative called amount past
                              their commitment? Recomputed independently
                              from store data -- never trust the advisor's
                              self-reported allocation.
-    10. Portfolio report requires commitment -- for `:portfolio/report`, is
+    11. Portfolio report requires commitment -- for `:portfolio/report`, is
                              the deal actually `:committed`/`:exited`? A
                              board-report/KPI record on a deal the fund
                              never invested in is fabricated monitoring.
-    11. Confidence floor / actuation gate -- LLM confidence below threshold,
+    12. Confidence floor / actuation gate -- LLM confidence below threshold,
                              OR the op is `:capital-call/issue`,
                              `:investment/commit` or `:exit/distribute` ->
                              escalate."
@@ -175,6 +182,24 @@
       [{:rule :term-sheet-missing
         :detail "term sheetが一度も提案されていない状態での投資実行提案"}])))
 
+(defn- term-sheet-not-executed-violations
+  "For `:investment/commit`, the LATEST term-sheet version must be FULLY
+  EXECUTED -- both `:fund` and `:founder` have signed THAT version
+  (`vcfund.registry/fully-executed?`, checked against the deal's own
+  signature history, never trusting a caller-supplied claim). This check
+  only fires once at least one term sheet exists -- `term-sheet-missing-
+  violations` already handles the zero-proposals case, so this function
+  stays silent then rather than duplicating that violation."
+  [{:keys [op subject]} st]
+  (when (= op :investment/commit)
+    (let [history (store/term-sheet-history-of st subject)]
+      (when (seq history)
+        (let [latest-version (get (last history) "version")
+              signatures (store/signature-history-of st subject)]
+          (when-not (registry/fully-executed? signatures latest-version)
+            [{:rule :term-sheet-not-executed
+              :detail "最新term sheetバージョンが双方署名済みでない状態での投資実行提案"}]))))))
+
 (defn- term-sheet-after-commitment-violations
   "For `:term-sheet/propose`, the deal must NOT already be `:committed`/
   `:exited` -- term-sheet negotiation is a pre-commitment activity; once
@@ -242,6 +267,7 @@
                            (stage-insufficient-violations request st)
                            (stage-transition-violations request st)
                            (term-sheet-missing-violations request st)
+                           (term-sheet-not-executed-violations request st)
                            (term-sheet-after-commitment-violations request st)
                            (accredited-investor-violations request st)
                            (overcall-violations request st)

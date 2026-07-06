@@ -5,6 +5,7 @@
   change, not a rewrite -- see `underwriting.store-contract-test` for the
   same pattern on the sibling actor this repo ports."
   (:require [clojure.test :refer [deftest is testing]]
+            [vcfund.registry :as registry]
             [vcfund.store :as store]))
 
 (defn- backends []
@@ -18,6 +19,8 @@
       (is (= :safe (:security-type (store/deal s "deal-1"))))
       (is (true? (:accredited? (store/lp s "lp-1"))))
       (is (zero? (:called-amount (store/lp s "lp-1"))))
+      (is (= "0x71C7656EC7ab88b098defB751B7401B5f6d8976" (:wallet-address (store/lp s "lp-1")))
+          "crypto-native settlement rail: an LP may fund capital calls via an on-chain wallet")
       (is (= "Jane Founder" (:name (store/party s "party-1"))))
       (is (false? (:sanctions-hit? (store/party s "party-1"))))
       (is (true? (:sanctions-hit? (store/party s "party-3"))))
@@ -32,6 +35,7 @@
       (is (= [] (store/distribution-history s)))
       (is (= [] (store/portfolio-reports-of s "deal-1")))
       (is (= [] (store/term-sheet-history-of s "deal-1")))
+      (is (= [] (store/signature-history-of s "deal-1")))
       (is (zero? (store/next-sequence s "USA")))
       (is (zero? (store/call-sequence s "USA"))))))
 
@@ -59,6 +63,13 @@
                                  :payload {:proposed-by :fund :terms {:valuation 8000000}}})
         (is (= 1 (count (store/term-sheet-history-of s "deal-1"))))
         (is (= 0 (get (first (store/term-sheet-history-of s "deal-1")) "version"))))
+      (testing "term-sheet signatures accumulate as a per-deal history"
+        (store/commit-record! s {:effect :term-sheet/signed :path ["deal-1"]
+                                 :payload {:version 0 :signed-by :fund}})
+        (store/commit-record! s {:effect :term-sheet/signed :path ["deal-1"]
+                                 :payload {:version 0 :signed-by :founder}})
+        (is (= 2 (count (store/signature-history-of s "deal-1"))))
+        (is (true? (registry/fully-executed? (store/signature-history-of s "deal-1") 0))))
       (testing "capital call drafts a call record, advances LP called-amounts and the call sequence"
         (store/commit-record! s {:effect :capital-call/mark-issued :path ["deal-1"]
                                  :payload {:jurisdiction "USA" :call-amount 2000000 :notice-date "2026-07-06"}})

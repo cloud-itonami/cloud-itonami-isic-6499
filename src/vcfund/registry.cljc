@@ -41,8 +41,8 @@
   [portfolio-company security-type amount jurisdiction sequence]
   (when-not (and portfolio-company (not= portfolio-company ""))
     (throw (ex-info "commitment: portfolio-company required" {})))
-  (when-not (contains? #{:safe :convertible-note :priced-equity} security-type)
-    (throw (ex-info "commitment: security-type must be :safe, :convertible-note or :priced-equity" {})))
+  (when-not (contains? #{:safe :convertible-note :priced-equity :saft} security-type)
+    (throw (ex-info "commitment: security-type must be :safe, :convertible-note, :priced-equity or :saft" {})))
   (when (< amount 0)
     (throw (ex-info "commitment: amount must be >= 0" {})))
   (when-not (and jurisdiction (not= jurisdiction ""))
@@ -238,6 +238,64 @@
             "proposed_by" (name proposed-by)
             "terms" terms
             "immutable" true}})
+
+(defn term-sheet-diff
+  "Field-level redline between two term-sheet rounds' `terms` maps --
+  what's new, what's gone, what changed. Pure, read-only; never mutates
+  either version. A key present in both with the same value is silently
+  omitted (unchanged terms aren't a redline)."
+  [prev-terms next-terms]
+  (when-not (map? prev-terms) (throw (ex-info "term-sheet-diff: prev-terms must be a map" {})))
+  (when-not (map? next-terms) (throw (ex-info "term-sheet-diff: next-terms must be a map" {})))
+  (let [all-keys (into (set (keys prev-terms)) (keys next-terms))]
+    (reduce (fn [acc k]
+              (let [absent ::absent
+                    pv (get prev-terms k absent)
+                    nv (get next-terms k absent)]
+                (cond
+                  (= pv nv)      acc
+                  (= pv absent)  (assoc-in acc [:added k] nv)
+                  (= nv absent)  (assoc-in acc [:removed k] pv)
+                  :else          (assoc-in acc [:changed k] {:from pv :to nv}))))
+            {:added {} :removed {} :changed {}}
+            all-keys)))
+
+(defn register-term-sheet-signature
+  "Validate + construct a term-sheet e-signature DRAFT record -- one
+  party's signature against a SPECIFIC term-sheet version (never the
+  latest-at-signing-time implicitly; a stale-version signature is a
+  distinct failure mode `vcfund.governor` checks for). Append-only,
+  parallel to the term-sheet history itself: signing never mutates or
+  replaces the term-sheet record it signs. No certificate: like the term
+  sheet itself, this is process state this actor tracks, not a legal
+  instrument it issues -- a real e-signature (DocuSign, on-chain
+  signature, wet-ink scan) is the actual legal act; this is the audit
+  record of it having happened."
+  [deal-id version signed-by]
+  (when-not (and deal-id (not= deal-id ""))
+    (throw (ex-info "term-sheet-signature: deal-id required" {})))
+  (when (< version 0)
+    (throw (ex-info "term-sheet-signature: version must be >= 0" {})))
+  (when-not (contains? #{:fund :founder} signed-by)
+    (throw (ex-info "term-sheet-signature: signed-by must be :fund or :founder" {})))
+  {"record" {"record_id" (str deal-id "#term-sheet-v" version "#signed-by-" (name signed-by))
+            "kind" "term-sheet-signature"
+            "deal_id" deal-id
+            "version" version
+            "signed_by" (name signed-by)
+            "immutable" true}})
+
+(defn fully-executed?
+  "Is term-sheet `version` fully executed -- BOTH :fund and :founder have
+  signed THAT SPECIFIC version (not some earlier or later one)?
+  `signatures` -- the deal's append-only signature history (`vcfund.store/
+  signature-history-of`)."
+  [signatures version]
+  (let [signers (into #{}
+                      (comp (filter #(= version (get % "version")))
+                            (map #(get % "signed_by")))
+                      signatures)]
+    (and (contains? signers "fund") (contains? signers "founder"))))
 
 (defn append
   "Append a commitment/distribution record, returning a NEW list (never
