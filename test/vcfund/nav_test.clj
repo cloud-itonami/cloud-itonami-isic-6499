@@ -169,6 +169,14 @@
       (is (close? 240000.0 (:management-fees-accrued r)))
       (is (close? 1760000.0 (:nav r))))))
 
+(deftest fund-nav-report-exposes-the-fee-inputs-for-downstream-integration
+  (testing "fee-basis/annual-fee-rate/years-elapsed are exposed alongside the accrual -- e.g. for a downstream cloud-itonami-isic-6630 fee-drawdown actor to independently re-verify, never re-deriving fee-basis from scratch"
+    (let [db (store/seed-db)
+          r (nav/fund-nav-report db {:fund-life-years 2})]
+      (is (close? 6000000.0 (:fee-basis r)))
+      (is (close? 0.02 (:annual-fee-rate r)))
+      (is (close? 2.0 (:years-elapsed r))))))
+
 (deftest fund-nav-report-applies-the-step-down-when-supplied
   (let [db (store/seed-db)]
     (store/commit-record! db {:effect :capital-call/mark-issued :path ["deal-1"]

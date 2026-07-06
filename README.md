@@ -146,6 +146,34 @@ commitment/called amounts AND a held deal's cost-basis/fair-value-mark
 still NOT covered (`total-invested-at-cost`/distribution-waterfall
 figures, which carry no currency tag on their underlying records).
 
+## Relationship to `cloud-itonami-isic-6430`/`6630` (the fund vehicle / management company)
+
+A real VC fund is legally three things: the investment decision-maker
+(this repo -- DD, sourcing, capital-call/commitment/distribution
+PROPOSALS, never itself a legal act), the fund vehicle itself
+(`cloud-itonami-isic-6430`, `trustfund.*` -- the entity that actually
+holds LP subscriptions and issues the binding capital-call NOTICE), and
+the management company (`cloud-itonami-isic-6630`, `fundmgmt.*` -- the
+GP entity that draws the management fee `vcfund.nav/fund-nav-report`
+computes as an accrual). Three separate repos, three separate legal
+entities, **no shared code** -- only a documented DATA CONTRACT, the
+same "self-contained sibling" posture this repo already has toward
+`kotoba-lang/insurance`.
+
+This repo needed almost no change to support this: `vcfund.registry/
+register-capital-call`'s return value already IS the upstream fact
+`trustfund.governor` ingests and independently re-verifies (recomputing
+the SAME pro-rata math from its OWN subscription ledger -- a deliberately
+SEPARATE re-implementation, not a shared-library call, so a bug on one
+side can't silently defeat the other side's check). The one addition:
+`fund-nav-report`'s return now also exposes `:fee-basis`/`:annual-fee-
+rate`/`:years-elapsed` (previously internal-only) so `cloud-itonami-isic-
+6630`'s `fundmgmt.governor` can independently recompute the fee accrual
+and check the claimed rate against its own recorded LPA fee-cap mandate
+-- purely additive, every existing caller unaffected. See
+`docs/adr/0001-architecture.md` Addendum 11, and `cloud-itonami-isic-
+6430`/`6630`'s own READMEs and ADRs, for the full design.
+
 ## Run
 
 ```bash

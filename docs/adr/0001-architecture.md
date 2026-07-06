@@ -824,3 +824,86 @@ multi-SAFE rounds, actual AMT LIABILITY computation and 83(b) elections,
 `total-invested-at-cost`/distribution-waterfall currency conversion,
 secondary transfers of an LP's fund interest, tax/regulatory reporting
 (K-1s, Form D/ADV).
+
+## Addendum 11 (2026-07-06, same day, owner-directed): `cloud-itonami-isic-6430`/`6630` promoted from documentation-only to real, tested cross-repo integration
+
+Section 6 above ("Relationship to the adjacent ISIC blueprints")
+described `6430` (trust/fund vehicle) and `6630` (fee-based fund
+management) as "adjacent" -- but at the time, BOTH were `:blueprint`-tier
+markdown-only stubs with zero code, so "self-contained sibling, not a
+shared-code dependency" was really just "no relationship exists yet to
+even be a dependency." Asked directly whether this repo was "連携/連動"
+(linked/integrated) with any other ISIC classification, and then asked
+to design real interoperation, the owner picked the largest of three
+offered scopes: implement BOTH `6430` and `6630` as real governed actors
+(promoted `:blueprint` → `:implemented`, the same tier this repo
+reached earlier the same day) and wire them to genuinely interoperate
+with this one.
+
+- **The three-actor system**: this repo (`6499`) decides WHAT capital
+  moves (DD, sourcing, capital-call/commitment/distribution
+  PROPOSALS -- never itself a legal act). `cloud-itonami-isic-6430`
+  (`trustfund.*`) is the fund vehicle -- the legal entity that actually
+  holds LP subscriptions and issues the binding capital-call NOTICE off
+  an upstream proposal from THIS repo. `cloud-itonami-isic-6630`
+  (`fundmgmt.*`) is the management company -- the GP entity that draws
+  the management fee THIS repo's `vcfund.nav/fund-nav-report` computes
+  as an accrual. Three separate repos, three separate legal entities,
+  NO shared code -- only a documented DATA CONTRACT, the same
+  "self-contained sibling" posture this repo already has toward
+  `kotoba-lang/insurance`.
+- **This repo needed almost no code change** -- its EXISTING pure
+  functions already produced exactly the fact shapes the two new
+  downstream actors needed: `vcfund.registry/register-capital-call`'s
+  return value IS the upstream fact `trustfund.governor` ingests and
+  independently re-verifies (recomputing the SAME pro-rata-by-
+  commitment-share math from ITS OWN subscription ledger, a deliberately
+  SEPARATE re-implementation, never a shared-library call -- so a bug in
+  one side's math can't silently defeat the other side's check).
+- **One small, additive change WAS needed**: `vcfund.nav/fund-nav-
+  report`'s return map now also exposes `:fee-basis`/`:annual-fee-rate`/
+  `:years-elapsed` (the exact inputs `management-fee-accrued` used to
+  compute `:management-fees-accrued`) -- these were previously only
+  local `let` bindings inside the fn, computed but never returned. This
+  is what `cloud-itonami-isic-6630`'s `fundmgmt.governor` needs to
+  independently recompute the accrual (`fundmgmt.registry/fee-accrued`,
+  again a separate re-implementation) from the SAME basis/rate/years
+  this repo used, rather than trusting `:management-fees-accrued` alone
+  as an opaque final number. Purely additive -- every existing caller's
+  behavior is unchanged (verified: all 164 pre-existing tests still
+  pass unmodified), the same "expose an already-computed local value"
+  pattern used for `:total-distributed-to-lps` in Addendum 10.
+- **Each downstream actor adds real, non-duplicative value, not a
+  rubber stamp**: `trustfund.governor` independently re-verifies the
+  FULL pro-rata allocation (protects against a wrong/tampered upstream
+  number, since it has its own LP subscription directory to re-derive
+  from). `fundmgmt.governor` cannot re-derive `:fee-basis` (it has no LP
+  directory of its own) but DOES independently reapply the rate*basis*
+  years formula and, distinctly, checks the upstream-claimed rate
+  against its OWN recorded LPA fee-rate-cap mandate and refuses to
+  double-draw a billing period -- checks `vcfund.governor` has no
+  concept of at all, since rate-cap compliance and double-draw
+  prevention are fundamentally the management company's OWN fiduciary
+  responsibility, not the investment actor's.
+- See `cloud-itonami-isic-6430`'s and `cloud-itonami-isic-6630`'s own
+  ADR-0001s for the full design of each downstream actor (governor
+  checks, phase tables, test/demo scenarios).
+
+Consequences: `vcfund.nav`'s test suite grew from 164 tests/629
+assertions to 165 tests/632 assertions (one new test confirming the
+exposed fee-input keys), still lint-clean, demo unaffected (a purely
+additive return-map change). `cloud-itonami-isic-6430` went from 0 lines
+of code to 26 tests/116 assertions (lint-clean, demo runs end-to-end);
+`cloud-itonami-isic-6630` went from 0 lines of code to 25 tests/98
+assertions (lint-clean, demo runs end-to-end). Both new actors' demos
+and test suites exercise BOTH the clean escalate-then-approve path AND
+multiple HARD-hold cases proving the independent re-verification
+actually catches a tampered/mismatched/non-compliant upstream fact, not
+merely a happy-path pass-through. Remaining honest gaps in the
+three-actor system: no real transport between the three actors is
+implemented (a message queue / signed webhook / shared `kotoba-server`
+pod -- documented as an operator's deployment decision, not code here);
+`6430` does not yet implement NAV publication or distribution recording
+off upstream `6499` facts (same integration pattern, next steps);
+`6630` does not yet implement carry distribution off `6499`'s exit-
+waterfall `:total-to-gp` figure (same pattern, next step).

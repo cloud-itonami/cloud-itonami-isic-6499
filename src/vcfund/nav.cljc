@@ -212,7 +212,17 @@
   commitment-history records, which carry no currency tag) or any
   distribution/waterfall figure -- those stay single-currency regardless
   (see ns docstring). Omit both for single-currency, no-conversion
-  behavior (the default -- every earlier caller's exact behavior)."
+  behavior (the default -- every earlier caller's exact behavior).
+
+  The returned map also exposes `:fee-basis`/`:annual-fee-rate`/
+  `:years-elapsed` (the FX-converted total LP commitments, the rate, and
+  `fund-life-years`, respectively -- the exact inputs `management-fee-
+  accrued` used to compute `:management-fees-accrued`) alongside the
+  accrual itself, purely additive, so an operator/integration can hand
+  the whole slice to a downstream management-fee-drawdown actor (e.g.
+  `cloud-itonami-isic-6630`'s `fundmgmt.governor`, which independently
+  re-verifies it -- see that repo's ADR for the documented cross-repo
+  data contract) without separately re-deriving the fee basis."
   ([st] (fund-nav-report st {}))
   ([st {:keys [fund-life-years annual-fee-rate investment-period-years post-investment-period-rate
               base-currency fx-rates]
@@ -232,8 +242,9 @@
         total-exit-proceeds-received (reduce + (map #(+ (double (:total-to-lp (get % "waterfall")))
                                                          (double (:total-to-gp (get % "waterfall"))))
                                                      distribution-recs))
+        fee-basis (reduce + (map #(conv (:commitment-amount %) (:currency %)) lps))
         management-fees-accrued (management-fee-accrued
-                                  {:fee-basis (reduce + (map #(conv (:commitment-amount %) (:currency %)) lps))
+                                  {:fee-basis fee-basis
                                    :annual-fee-rate annual-fee-rate
                                    :years-elapsed fund-life-years
                                    :investment-period-years investment-period-years
@@ -254,7 +265,10 @@
            :unfunded (when (seq lps)
                        (unfunded-commitments lps {:base-currency base-currency :fx-rates fx-rates}))
            :management-fees-accrued management-fees-accrued
-           :total-distributed-to-lps total-distributed-to-lps))))
+           :total-distributed-to-lps total-distributed-to-lps
+           :fee-basis fee-basis
+           :annual-fee-rate annual-fee-rate
+           :years-elapsed fund-life-years))))
 
 (defn lp-capital-account
   "One LP's capital-account slice -- their own commitment, called-to-date
