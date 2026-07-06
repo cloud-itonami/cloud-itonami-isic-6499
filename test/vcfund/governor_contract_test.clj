@@ -112,6 +112,59 @@
         (is (some #{:stage-insufficient} (-> (store/ledger db) last :basis)))
         (is (nil? (store/commitment-of db "deal-1")))))))
 
+(deftest term-sheet-propose-auto-commits
+  (testing "no capital risk -- proposing a term-sheet round auto-commits, no approval needed"
+    (let [[db actor] (fresh)
+          res (exec-op actor "t25" {:op :term-sheet/propose :subject "deal-1" :proposed-by :fund
+                                    :terms {:valuation 8000000 :security-type :safe}} operator)]
+      (is (= :commit (get-in res [:state :disposition])))
+      (is (not= :interrupted (:status res)))
+      (is (= 1 (count (store/term-sheet-history-of db "deal-1")))))))
+
+(deftest term-sheet-versions-accumulate-across-rounds
+  (testing "each propose call is a new version, append-only, not overwriting the prior round"
+    (let [[db actor] (fresh)]
+      (exec-op actor "t26a" {:op :term-sheet/propose :subject "deal-1" :proposed-by :fund
+                             :terms {:valuation 6000000}} operator)
+      (exec-op actor "t26b" {:op :term-sheet/propose :subject "deal-1" :proposed-by :founder
+                             :terms {:valuation 8000000}} operator)
+      (let [hist (store/term-sheet-history-of db "deal-1")]
+        (is (= 2 (count hist)))
+        (is (= 0 (get (first hist) "version")))
+        (is (= 1 (get (second hist) "version")))
+        (is (= "fund" (get (first hist) "proposed_by")))
+        (is (= "founder" (get (second hist) "proposed_by")))))))
+
+(deftest term-sheet-after-commitment-is-held
+  (testing "proposing new terms on an already-committed deal -> HARD hold"
+    (let [[db actor] (fresh)
+          _ (exec-op actor "t27a" {:op :dd/assess :subject "deal-1"} operator)
+          _ (approve! actor "t27a")
+          _ (exec-op actor "t27b" {:op :deal/advance-stage :subject "deal-1" :to-stage :ic-review} operator)
+          _ (exec-op actor "t27c" {:op :term-sheet/propose :subject "deal-1" :proposed-by :fund
+                                   :terms {:valuation 8000000}} operator)
+          _ (exec-op actor "t27d" {:op :investment/commit :subject "deal-1"} operator)
+          _ (approve! actor "t27d")
+          res (exec-op actor "t27" {:op :term-sheet/propose :subject "deal-1" :proposed-by :fund
+                                    :terms {:valuation 9000000}} operator)]
+      (is (= :hold (get-in res [:state :disposition])))
+      (is (some #{:term-sheet-after-commitment} (-> (store/ledger db) last :basis)))
+      (is (= 1 (count (store/term-sheet-history-of db "deal-1"))) "second proposal not recorded"))))
+
+(deftest commit-without-term-sheet-is-held
+  (testing "DD-cleared, KYC-cleared, IC-reviewed, but no term sheet was ever proposed -> HARD hold"
+    (let [[db actor] (fresh)]
+      (exec-op actor "t28a" {:op :dd/assess :subject "deal-1"} operator)
+      (approve! actor "t28a")
+      (exec-op actor "t28b" {:op :kyc/screen :subject "party-1"} operator)
+      (approve! actor "t28b")
+      (exec-op actor "t28c" {:op :deal/advance-stage :subject "deal-1" :to-stage :ic-review} operator)
+      ;; deliberately no :term-sheet/propose
+      (let [res (exec-op actor "t28" {:op :investment/commit :subject "deal-1"} operator)]
+        (is (= :hold (get-in res [:state :disposition])))
+        (is (some #{:term-sheet-missing} (-> (store/ledger db) last :basis)))
+        (is (nil? (store/commitment-of db "deal-1")))))))
+
 (deftest portfolio-report-without-commitment-is-held
   (testing "a KPI report on a deal that was never committed -> HARD hold"
     (let [[db actor] (fresh)
@@ -129,6 +182,8 @@
           _ (exec-op actor "t24b" {:op :kyc/screen :subject "party-1"} operator)
           _ (approve! actor "t24b")
           _ (exec-op actor "t24c" {:op :deal/advance-stage :subject "deal-1" :to-stage :ic-review} operator)
+          _ (exec-op actor "t24e" {:op :term-sheet/propose :subject "deal-1" :proposed-by :fund
+                                   :terms {:valuation 8000000 :security-type :safe}} operator)
           _ (exec-op actor "t24d" {:op :investment/commit :subject "deal-1"} operator)
           _ (approve! actor "t24d")
           res (exec-op actor "t24" {:op :portfolio/report :subject "deal-1" :period "2026-Q3"
@@ -199,6 +254,8 @@
           _ (exec-op actor "t8b" {:op :kyc/screen :subject "party-1"} operator)
           _ (approve! actor "t8b")
           _ (exec-op actor "t8c" {:op :deal/advance-stage :subject "deal-1" :to-stage :ic-review} operator)
+          _ (exec-op actor "t8e" {:op :term-sheet/propose :subject "deal-1" :proposed-by :fund
+                                  :terms {:valuation 8000000 :security-type :safe}} operator)
           r1 (exec-op actor "t8" {:op :investment/commit :subject "deal-1"} operator)]
       (is (= :interrupted (:status r1)) "pauses for human approval even when governor-clean")
       (testing "approve -> commit, investment-commitment record drafted"
@@ -212,6 +269,8 @@
           _ (exec-op actor "t9a" {:op :dd/assess :subject "deal-1"} operator)
           _ (approve! actor "t9a")
           _ (exec-op actor "t9c" {:op :deal/advance-stage :subject "deal-1" :to-stage :ic-review} operator)
+          _ (exec-op actor "t9e" {:op :term-sheet/propose :subject "deal-1" :proposed-by :fund
+                                  :terms {:valuation 8000000 :security-type :safe}} operator)
           _ (exec-op actor "t9" {:op :investment/commit :subject "deal-1"} operator)
           r2 (g/run* actor {:approval {:status :rejected :by "op-1"}}
                      {:thread-id "t9" :resume? true})]
@@ -224,6 +283,8 @@
           _ (exec-op actor "t10a" {:op :dd/assess :subject "deal-1"} operator)
           _ (approve! actor "t10a")
           _ (exec-op actor "t10z" {:op :deal/advance-stage :subject "deal-1" :to-stage :ic-review} operator)
+          _ (exec-op actor "t10e" {:op :term-sheet/propose :subject "deal-1" :proposed-by :fund
+                                   :terms {:valuation 8000000 :security-type :safe}} operator)
           _ (exec-op actor "t10b" {:op :investment/commit :subject "deal-1"} operator)
           _ (approve! actor "t10b")
           r1 (exec-op actor "t10" {:op :exit/distribute :subject "deal-1"

@@ -31,6 +31,7 @@
       (is (= [] (store/commitment-history s)))
       (is (= [] (store/distribution-history s)))
       (is (= [] (store/portfolio-reports-of s "deal-1")))
+      (is (= [] (store/term-sheet-history-of s "deal-1")))
       (is (zero? (store/next-sequence s "USA")))
       (is (zero? (store/call-sequence s "USA"))))))
 
@@ -53,6 +54,11 @@
         (store/commit-record! s {:effect :deal/advance-stage :path ["deal-1"]
                                  :payload {:to-stage :ic-review}})
         (is (= :ic-review (:status (store/deal s "deal-1")))))
+      (testing "term-sheet proposals accumulate as a versioned per-deal history"
+        (store/commit-record! s {:effect :term-sheet/proposed :path ["deal-1"]
+                                 :payload {:proposed-by :fund :terms {:valuation 8000000}}})
+        (is (= 1 (count (store/term-sheet-history-of s "deal-1"))))
+        (is (= 0 (get (first (store/term-sheet-history-of s "deal-1")) "version"))))
       (testing "capital call drafts a call record, advances LP called-amounts and the call sequence"
         (store/commit-record! s {:effect :capital-call/mark-issued :path ["deal-1"]
                                  :payload {:jurisdiction "USA" :call-amount 2000000 :notice-date "2026-07-06"}})

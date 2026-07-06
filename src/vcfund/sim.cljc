@@ -1,15 +1,17 @@
 (ns vcfund.sim
   "Demo driver -- `clojure -M:dev:run`. Walks a clean LP + deal through
   LP intake -> deal DD assessment -> KYC screening -> pipeline-stage
-  advance to :ic-review (auto-commits, no capital risk) -> capital-call
-  proposal (always escalates) -> human approval -> commit -> investment-
-  commitment proposal (always escalates) -> human approval -> commit ->
-  portfolio KPI report (auto-commits) -> exit-distribution proposal
-  (always escalates) -> human approval -> commit, then shows four HARD
-  holds (a sanctions hit, a fabricated jurisdiction, an overcalled capital
-  call, and an illegal pipeline-stage transition) that never reach a human
-  at all, and prints the audit ledger + the draft capital-call/commitment/
-  distribution/portfolio-report records."
+  advance to :ic-review (auto-commits, no capital risk) -> term-sheet
+  proposal (auto-commits) -> capital-call proposal (always escalates) ->
+  human approval -> commit -> investment-commitment proposal (always
+  escalates) -> human approval -> commit -> portfolio KPI report
+  (auto-commits) -> exit-distribution proposal (always escalates) -> human
+  approval -> commit, then shows five HARD holds (a sanctions hit, a
+  fabricated jurisdiction, an overcalled capital call, an illegal
+  pipeline-stage transition, and a term-sheet proposal on an
+  already-committed deal) that never reach a human at all, and prints the
+  audit ledger + the draft capital-call/commitment/distribution/
+  portfolio-report/term-sheet records."
   (:require [langgraph.graph :as g]
             [vcfund.store :as store]
             [vcfund.operation :as op]))
@@ -39,6 +41,11 @@
 
     (println "== deal/advance-stage deal-1 :sourced -> :ic-review (no capital risk; auto-commits) ==")
     (println (exec! actor "t3a" {:op :deal/advance-stage :subject "deal-1" :to-stage :ic-review} operator))
+
+    (println "== term-sheet/propose deal-1 v0 (fund's opening terms; no capital risk; auto-commits) ==")
+    (println (exec! actor "t3c" {:op :term-sheet/propose :subject "deal-1" :proposed-by :fund
+                                :terms {:valuation 8000000 :security-type :safe
+                                       :pro-rata-rights true :board-seat false}} operator))
 
     (println "== capital-call/issue deal-1 (call $2,000,000 pro-rata from LPs; always escalates -- actuation/call) ==")
     (let [r (exec! actor "t3b" {:op :capital-call/issue :subject "deal-1"
@@ -77,6 +84,10 @@
     (println "== deal/advance-stage deal-3 :sourced -> :committed (illegal -- only the real commit op may reach :committed -> HARD hold) ==")
     (println (exec! actor "t9" {:op :deal/advance-stage :subject "deal-3" :to-stage :committed} operator))
 
+    (println "== term-sheet/propose deal-1 v1 (already committed -> HARD hold, never reaches a human) ==")
+    (println (exec! actor "t10c" {:op :term-sheet/propose :subject "deal-1" :proposed-by :founder
+                                  :terms {:valuation 9000000}} operator))
+
     (println "== audit ledger ==")
     (doseq [f (store/ledger db)] (println f))
 
@@ -88,6 +99,9 @@
 
     (println "== draft portfolio-report records (deal-1) ==")
     (doseq [r (store/portfolio-reports-of db "deal-1")] (println r))
+
+    (println "== draft term-sheet records (deal-1) ==")
+    (doseq [r (store/term-sheet-history-of db "deal-1")] (println r))
 
     (println "== draft exit-distribution records ==")
     (doseq [r (store/distribution-history db)] (println r))))

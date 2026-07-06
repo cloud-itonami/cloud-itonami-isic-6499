@@ -27,8 +27,9 @@
   (is (empty? (:writes (get phase/phases 0)))))
 
 (deftest phase-3-auto-commits-only-the-no-capital-risk-ops
-  (testing ":lp/intake, :deal/advance-stage and :portfolio/report move no capital -- auto-eligible"
-    (is (= #{:lp/intake :deal/advance-stage :portfolio/report} (:auto (get phase/phases 3))))))
+  (testing ":lp/intake, :deal/advance-stage, :term-sheet/propose and :portfolio/report move no capital -- auto-eligible"
+    (is (= #{:lp/intake :deal/advance-stage :term-sheet/propose :portfolio/report}
+           (:auto (get phase/phases 3))))))
 
 (deftest gate-hold-always-wins
   (is (= :hold (:disposition (phase/gate 3 {:op :lp/intake} :hold)))))

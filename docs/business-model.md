@@ -33,11 +33,16 @@
 - deal due-diligence checklist proposal against a named framework's
   spec-basis
 - AML/sanctions screening for LPs and portfolio-company parties
+- versioned term-sheet negotiation rounds (blocked once the deal is
+  already committed)
 - capital-call notice proposal, pro-rata by commitment share, overcall-blocked
 - Investment Committee capital-deployment proposal (requires the deal to
-  have actually reached Investment Committee review in the pipeline)
+  have actually reached Investment Committee review in the pipeline, and
+  at least one term-sheet round on file)
 - portfolio-company KPI/board-report logging for committed deals
-- SAFE-conversion and priced-round ownership/dilution estimates
+- SAFE-conversion, priced-round ownership/dilution (percentage and
+  absolute share-count terms) and option-pool-shuffle estimates
+- whole-fund NAV and unfunded-commitment reporting
 - exit-proceeds waterfall distribution proposal
 - immutable audit ledger
 
@@ -54,8 +59,9 @@
 - no capital is called from LPs, committed to a portfolio company, or paid
   out as an exit distribution without Investment Committee (human) sign-off
 - a fabricated DD checklist, a sanctions hit, a missing accredited-investor
-  affirmation, or a call that would overcall an LP past their commitment
-  forces a hold, not an override
+  affirmation, a call that would overcall an LP past their commitment, or a
+  commit attempted with no term sheet ever proposed forces a hold, not an
+  override
 - LP personal/financial data and portfolio-company confidential data stay
   outside Git
 - every call/commitment/distribution path is auditable

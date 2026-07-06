@@ -212,6 +212,33 @@
             "kpis" kpis
             "immutable" true}})
 
+(defn register-term-sheet
+  "Validate + construct a versioned term-sheet DRAFT record -- one round of
+  a deal's pre-commitment negotiation. `terms` is whatever fields the
+  operator's term-sheet template asks for (valuation, security type,
+  pro-rata rights, board seat, liquidation-preference multiple, ...) --
+  never invented here, always the real terms on the table. `version`
+  advances one per round (0-indexed, one call per proposal/counter);
+  negotiation history is append-only, never overwriting a prior version.
+  No certificate: a term sheet is non-binding by convention, not a legal
+  instrument this actor issues."
+  [deal-id proposed-by terms version]
+  (when-not (and deal-id (not= deal-id ""))
+    (throw (ex-info "term-sheet: deal-id required" {})))
+  (when-not (contains? #{:fund :founder} proposed-by)
+    (throw (ex-info "term-sheet: proposed-by must be :fund or :founder" {})))
+  (when-not (map? terms)
+    (throw (ex-info "term-sheet: terms must be a map" {})))
+  (when (< version 0)
+    (throw (ex-info "term-sheet: version must be >= 0" {})))
+  {"record" {"record_id" (str deal-id "#term-sheet-v" version)
+            "kind" "term-sheet-draft"
+            "deal_id" deal-id
+            "version" version
+            "proposed_by" (name proposed-by)
+            "terms" terms
+            "immutable" true}})
+
 (defn append
   "Append a commitment/distribution record, returning a NEW list (never
   mutate history in place)."

@@ -136,6 +136,30 @@
      :stake      nil
      :confidence (if legal? 0.9 0.2)}))
 
+(defn- propose-term-sheet
+  "Draft one round of term-sheet negotiation -- `:terms` (valuation,
+  security type, pro-rata rights, board seat, liquidation-preference
+  multiple, whatever the operator's template asks for) and `:proposed-by`
+  (`:fund` or `:founder`) supplied by the caller from the actual
+  negotiation, never invented here. `vcfund.governor`'s
+  `term-sheet-after-commitment-violations` independently blocks proposing
+  new terms once capital is already committed. No capital moves here, so
+  `:stake` is nil -- not actuation."
+  [db {:keys [subject proposed-by terms]}]
+  (let [d (store/deal db subject)
+        committed? (contains? #{:committed :exited} (:status d))
+        version (count (store/term-sheet-history-of db subject))]
+    {:summary    (str subject " term sheet v" version " (" (name proposed-by) " 提案)"
+                      (when committed? " (commit済み案件への提案は不可)"))
+     :rationale  (if committed?
+                   "投資実行済みの案件への新規term sheet提案"
+                   "pre-commitment交渉ラウンド")
+     :cites      (vec (keys terms))
+     :effect     :term-sheet/proposed
+     :value      {:deal-id subject :proposed-by proposed-by :terms terms}
+     :stake      nil
+     :confidence (if committed? 0.2 0.9)}))
+
 (defn- propose-portfolio-report
   "Draft a portfolio-monitoring KPI report for an already-committed deal --
   board-reporting-style facts (`:kpis`) supplied by the caller from the
@@ -240,6 +264,7 @@
     :dd/assess          (assess-dd db request)
     :kyc/screen         (screen-kyc db request)
     :deal/advance-stage (propose-advance-stage db request)
+    :term-sheet/propose (propose-term-sheet db request)
     :capital-call/issue (propose-capital-call db request)
     :investment/commit  (propose-commit db request)
     :portfolio/report   (propose-portfolio-report db request)
@@ -263,7 +288,7 @@
        "キー: :summary(人向けドラフト) :rationale(根拠/必ず事実から) "
        ":cites(使った事実キーのベクタ) "
        ":effect(:lp/upsert|:assessment/set|:kyc/set|:deal/advance-stage|"
-       ":capital-call/mark-issued|:investment/mark-committed|"
+       ":term-sheet/proposed|:capital-call/mark-issued|:investment/mark-committed|"
        ":portfolio/report-logged|:distribution/mark-paid) "
        ":stake(:actuation/call|:actuation/deploy|:actuation/distribute|nil) :confidence(0..1)。\n"
        "重要: 登録されていない法域のfund-formation/exemption要件を絶対に創作してはいけません。"
@@ -274,6 +299,8 @@
     :dd/assess          {:deal (store/deal st subject)}
     :kyc/screen         {:party (store/party st subject)}
     :deal/advance-stage {:deal (store/deal st subject)}
+    :term-sheet/propose {:deal (store/deal st subject)
+                        :term-sheet-history (store/term-sheet-history-of st subject)}
     :capital-call/issue {:deal (store/deal st subject) :lps (store/all-lps st)}
     :investment/commit  {:deal (store/deal st subject)
                          :assessment (store/assessment-of st subject)}

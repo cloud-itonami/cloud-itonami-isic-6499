@@ -31,6 +31,36 @@
       (is (thrown? Exception
                    (r/register-commitment company security-type amount jurisdiction 1))))))
 
+;; ----------------------------- term sheets -----------------------------
+
+(deftest term-sheet-is-a-draft-with-no-certificate
+  (let [result (r/register-term-sheet "deal-1" :fund {:valuation 8000000} 0)]
+    (is (nil? (get result "certificate")) "a term sheet is non-binding, not a legal instrument this actor issues")
+    (is (= (get-in result ["record" "immutable"]) true))
+    (is (= (get-in result ["record" "kind"]) "term-sheet-draft"))))
+
+(deftest term-sheet-versions-and-proposer
+  (let [result (r/register-term-sheet "deal-1" :founder {:valuation 9000000} 2)]
+    (is (= (get-in result ["record" "record_id"]) "deal-1#term-sheet-v2"))
+    (is (= (get-in result ["record" "version"]) 2))
+    (is (= (get-in result ["record" "proposed_by"]) "founder"))
+    (is (= (get-in result ["record" "terms"]) {:valuation 9000000}))))
+
+(deftest term-sheet-validation-rules
+  (is (thrown? Exception (r/register-term-sheet "" :fund {} 0)))
+  (is (thrown? Exception (r/register-term-sheet "deal-1" :investor {} 0)) "proposed-by must be :fund or :founder")
+  (is (thrown? Exception (r/register-term-sheet "deal-1" :fund "not-a-map" 0)))
+  (is (thrown? Exception (r/register-term-sheet "deal-1" :fund {} -1))))
+
+(deftest term-sheet-history-is-append-only
+  (let [v0 (r/register-term-sheet "deal-1" :fund {:valuation 6000000} 0)
+        hist (r/append [] v0)
+        v1 (r/register-term-sheet "deal-1" :founder {:valuation 8000000} 1)
+        hist2 (r/append hist v1)]
+    (is (= 2 (count hist2)))
+    (is (= 0 (get-in hist2 [0 "version"])))
+    (is (= 1 (get-in hist2 [1 "version"])))))
+
 ;; ----------------------------- capital calls -----------------------------
 
 (def lps-fixture

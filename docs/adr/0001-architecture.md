@@ -257,3 +257,66 @@ a dedicated follow-on-investment op (currently: source a new deal record
 for the follow-on round and run it through the same lifecycle), board-seat/
 governance-rights administration, whole-fund European waterfall, tax/
 regulatory reporting.
+
+## Addendum 3 (2026-07-06, same day): whole-fund NAV, absolute cap-table shares, term-sheet negotiation
+
+A third honest coverage pass closed the three gaps the owner picked next:
+
+- **`vcfund.nav`** (new, pure + a store-aware adapter) -- `unfunded-
+  commitments` (per-LP and fund-wide: commitment - called) and `fund-nav`
+  (net cash + fair value of still-held investments; net cash = total
+  called + total exit-proceeds-received - total-invested-at-cost -
+  total-distributed-to-lps). A held investment defaults to cost basis
+  until an operator records a `:fair-value-mark` KPI via `:portfolio/
+  report` -- never silently mark up an unvalued investment. `fund-nav-
+  report` reads the live store (LPs, commitment/distribution history,
+  latest fair-value mark per deal) and calls the pure functions -- kept
+  separate so the NAV math itself has zero I/O dependency. Read-only
+  reporting, not a governed op: computing NAV moves no capital. Honestly
+  does NOT net fund expenses/management fees into cash, and assumes one
+  fund base currency (no FX) -- see its docstring. Verified against a full
+  store-driven lifecycle: NAV = cost basis while held and unmarked, tracks
+  a `:fair-value-mark` once recorded, and after exit correctly reduces to
+  exactly the GP carry still resident in fund cash pending a GP-carry
+  sweep (no dedicated "pay GP carry" op exists, so that cash is real, not
+  a rounding artifact).
+- **`vcfund.captable` extended** -- `option-pool-shuffle` (the standard
+  pre-money-pool term-sheet mechanic: a new/refreshed pool is carved out
+  of EXISTING holders' ownership, not the new investor's -- the single
+  most common source of dilution founders under-account for),
+  `priced-round-shares` (absolute share-count math: price-per-share =
+  pre-money-valuation / pre-round-shares, composes with
+  `option-pool-shuffle`'s output), and `cap-table-ownership`
+  (fully-diluted ownership % from a plain `{:holder :shares}` cap table).
+  Still no vesting, no option strike-price/exercise modeling, no
+  multi-SAFE simultaneous-conversion proration.
+- **`:term-sheet/propose`** (new op) -- versioned per-deal negotiation
+  history (`vcfund.registry/register-term-sheet`, append-only,
+  `:proposed-by` `:fund`/`:founder`, arbitrary `:terms` map). New HARD
+  checks: `term-sheet-after-commitment-violations` (can't propose new
+  terms once the deal is `:committed`/`:exited` -- negotiation is
+  pre-commitment only) and **`term-sheet-missing-violations`** (NEW
+  precondition on `:investment/commit`: capital never moves on a
+  handshake with no term sheet ever proposed for the deal, independent of
+  and in addition to `dd-incomplete-violations`/`stage-insufficient-
+  violations`). `:term-sheet/propose` is NOT `high-stakes` (no capital
+  moves) -- auto-eligible at phase 3, same posture as `:deal/advance-
+  stage`/`:portfolio/report`.
+- **Every existing test/demo path that reaches `:investment/commit`
+  needed a `:term-sheet/propose` step added** -- the same "close a real
+  gap, then go fix every call site" discipline the `:ic-review` stage
+  requirement already established in Addendum 2. `commit-without-term-
+  sheet-is-held` is the new dedicated regression test proving the
+  precondition holds in isolation.
+
+Consequences: `test/vcfund/*` grew from 60 tests/278 assertions to 81
+tests/347 assertions (new `nav_test.clj` plus governor/registry/store/
+phase additions), still lint-clean; demo (`clojure -M:dev:run`) walks the
+full lifecycle including the new term-sheet round and its own HARD-hold
+case (proposing terms after commitment). Remaining honest gaps (tracked in
+README's "Business-process coverage" table): term-sheet
+redlining/e-signature workflow (versions are recorded, no diff/counter-
+offer state machine), vesting/option-strike/multi-SAFE proration, a
+dedicated follow-on-investment op, board-seat/governance-rights
+administration, fund expense/management-fee accrual in NAV, multi-currency
+FX, whole-fund European waterfall, tax/regulatory reporting.

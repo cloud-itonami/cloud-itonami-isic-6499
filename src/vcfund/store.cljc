@@ -41,6 +41,7 @@
   (commitment-history [s] "the append-only investment-commitment history (vcfund.registry drafts)")
   (distribution-history [s] "the append-only exit-distribution history (vcfund.registry drafts)")
   (portfolio-reports-of [s deal-id] "the append-only KPI-report history for one deal, oldest first")
+  (term-sheet-history-of [s deal-id] "the append-only versioned term-sheet negotiation history for one deal, oldest first")
   (next-sequence [s jurisdiction] "next commitment-number sequence for a jurisdiction")
   (call-sequence [s jurisdiction] "next capital-call-number sequence for a jurisdiction")
   (commit-record! [s record] "apply a committed op's record to the SSoT")
@@ -144,6 +145,7 @@
   (commitment-history [_] (:commitment-history @a))
   (distribution-history [_] (:distribution-history @a))
   (portfolio-reports-of [_ deal-id] (get-in @a [:portfolio-reports deal-id] []))
+  (term-sheet-history-of [_ deal-id] (get-in @a [:term-sheets deal-id] []))
   (next-sequence [_ jurisdiction]
     (get-in @a [:sequences jurisdiction] 0))
   (call-sequence [_ jurisdiction]
@@ -161,6 +163,14 @@
 
       :deal/advance-stage
       (swap! a assoc-in [:deals (first path) :status] (:to-stage payload))
+
+      :term-sheet/proposed
+      (let [deal-id (first path)
+            {:keys [proposed-by terms]} payload
+            version (count (get-in @a [:term-sheets deal-id] []))
+            result (registry/register-term-sheet deal-id proposed-by terms version)]
+        (swap! a update-in [:term-sheets deal-id] (fnil registry/append []) result)
+        result)
 
       :portfolio/report-logged
       (let [deal-id (first path)
@@ -215,7 +225,7 @@
                            :assessments {} :kyc {} :ledger [] :sequences {} :call-sequences {}
                            :commitments {} :commitment-history []
                            :capital-call-history [] :distribution-history []
-                           :portfolio-reports {}))))
+                           :portfolio-reports {} :term-sheets {}))))
 
 ;; ----------------------------- DatomicStore (langchain.db) -----------------------------
 
@@ -237,7 +247,8 @@
    :distribution-history/seq {:db/unique :db.unique/identity}
    :sequence/jurisdiction {:db/unique :db.unique/identity}
    :call-sequence/jurisdiction {:db/unique :db.unique/identity}
-   :portfolio-report/seq {:db/unique :db.unique/identity}})
+   :portfolio-report/seq {:db/unique :db.unique/identity}
+   :term-sheet/seq {:db/unique :db.unique/identity}})
 
 (defn- enc [v] (pr-str v))
 (defn- dec* [s] (when s (edn/read-string s)))
@@ -249,6 +260,13 @@
   globally unique, not merely unique per deal)."
   [conn]
   (count (d/q '[:find [?s ...] :where [?e :portfolio-report/seq ?s]] (d/db conn))))
+
+(defn- term-sheet-count
+  "Global count of term-sheet entities across ALL deals -- the identity
+  key (`:term-sheet/seq`, needs global uniqueness); the per-deal `version`
+  stored inside the record itself is a separate, per-deal count."
+  [conn]
+  (count (d/q '[:find [?s ...] :where [?e :term-sheet/seq ?s]] (d/db conn))))
 
 (defn- lp->tx [{:keys [id name commitment-amount called-amount currency jurisdiction accredited? status]}]
   (cond-> {:lp/id id}
@@ -361,6 +379,14 @@
               (d/db conn) deal-id)
          (sort-by first)
          (mapv (comp dec* second))))
+  (term-sheet-history-of [_ deal-id]
+    (->> (d/q '[:find ?s ?r :in $ ?did
+               :where [?e :term-sheet/deal-id ?did]
+                      [?e :term-sheet/seq ?s]
+                      [?e :term-sheet/record ?r]]
+              (d/db conn) deal-id)
+         (sort-by first)
+         (mapv (comp dec* second))))
   (next-sequence [_ jurisdiction]
     (or (d/q '[:find ?n . :in $ ?j
               :where [?e :sequence/jurisdiction ?j] [?e :sequence/next ?n]]
@@ -384,6 +410,16 @@
 
       :deal/advance-stage
       (d/transact! conn [{:deal/id (first path) :deal/status (enc (:to-stage payload))}])
+
+      :term-sheet/proposed
+      (let [deal-id (first path)
+            {:keys [proposed-by terms]} payload
+            version (count (term-sheet-history-of s deal-id))
+            result (registry/register-term-sheet deal-id proposed-by terms version)]
+        (d/transact! conn [{:term-sheet/seq (term-sheet-count conn)
+                           :term-sheet/deal-id deal-id
+                           :term-sheet/record (enc (get result "record"))}])
+        result)
 
       :portfolio/report-logged
       (let [deal-id (first path)
