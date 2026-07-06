@@ -8,7 +8,7 @@
   UnderwritingGovernor, `cloud-itonami-M6910`'s RegistrarGovernor and
   `cloud-itonami-L6810`'s RealtorGovernor.
 
-  Fifteen checks, in priority order. The first fourteen are HARD
+  Sixteen checks, in priority order. The first fifteen are HARD
   violations: a human approver CANNOT override them (you don't get to
   approve your way past a sanctions hit, a fabricated fund-formation
   spec-basis, incomplete DD, an LP missing an accredited-investor
@@ -17,19 +17,20 @@
   before Investment Committee review, before any term sheet was ever
   proposed, or before the latest term sheet is FULLY EXECUTED (both sides
   signed), a term sheet proposed after capital is already committed, a
-  portfolio report on a deal that was never actually committed, a
-  follow-on proposed on a deal with no prior commitment, an exit
-  distribution with no commitment record, or a GP-clawback repayment that
-  exceeds the independently-recomputed whole-fund entitlement). The last
-  is SOFT: it asks a human to look (low confidence / actuation), and the
-  human may approve -- but see `vcfund.phase`: for `:capital-call/issue`,
-  `:investment/commit`, `:investment/follow-on`, `:exit/distribute` and
-  `:waterfall/clawback-repay` (real capital movement, in any of the FOUR
-  directions) NO phase ever allows auto-commit either. Two independent
-  layers agree that all four directions of actuation are always a human
-  call. `:deal/advance-stage`, `:term-sheet/propose`, `:term-sheet/sign`
-  and `:portfolio/report` are NOT actuation (no capital moves) and so are
-  NOT high-stakes -- they may auto-commit when clean, a deliberately
+  portfolio report or a board-seat event on a deal that was never
+  actually committed, a follow-on proposed on a deal with no prior
+  commitment, an exit distribution with no commitment record, or a
+  GP-clawback repayment that exceeds the independently-recomputed
+  whole-fund entitlement). The last is SOFT: it asks a human to look (low
+  confidence / actuation), and the human may approve -- but see
+  `vcfund.phase`: for `:capital-call/issue`, `:investment/commit`,
+  `:investment/follow-on`, `:exit/distribute` and `:waterfall/clawback-
+  repay` (real capital movement, in any of the FOUR directions) NO phase
+  ever allows auto-commit either. Two independent layers agree that all
+  four directions of actuation are always a human call. `:deal/advance-
+  stage`, `:term-sheet/propose`, `:term-sheet/sign`, `:portfolio/report`
+  and `:governance/board-seat` are NOT actuation (no capital moves) and so
+  are NOT high-stakes -- they may auto-commit when clean, a deliberately
   lighter-touch posture matching their actual (low) risk.
 
     1.  Spec-basis        -- did the DD proposal cite an OFFICIAL
@@ -96,7 +97,12 @@
                              entitlement (`vcfund.waterfall/whole-fund-
                              waterfall-report`)? Never trust the proposal's
                              self-reported repayment figure.
-    15. Confidence floor / actuation gate -- LLM confidence below threshold,
+    15. Board seat requires commitment -- for `:governance/board-seat`, is
+                             the deal actually `:committed`/`:exited`? A
+                             board-seat grant/revocation on a deal the fund
+                             never invested in is fabricated governance
+                             administration.
+    16. Confidence floor / actuation gate -- LLM confidence below threshold,
                              OR the op is `:capital-call/issue`,
                              `:investment/commit`, `:investment/follow-on`,
                              `:exit/distribute` or `:waterfall/clawback-
@@ -200,6 +206,19 @@
       (when-not (contains? #{:committed :exited} status)
         [{:rule :portfolio-report-without-commitment
           :detail "投資実行(commit)されていない案件へのポートフォリオレポート提案"}]))))
+
+(defn- board-seat-requires-commitment-violations
+  "For `:governance/board-seat`, the deal must actually be `:committed` or
+  `:exited` -- a board-seat grant/revocation on a deal the fund never
+  invested in would be fabricated governance administration, the same
+  posture `portfolio-report-requires-commitment-violations` takes on KPI
+  reports."
+  [{:keys [op subject]} st]
+  (when (= op :governance/board-seat)
+    (let [status (:status (store/deal st subject))]
+      (when-not (contains? #{:committed :exited} status)
+        [{:rule :board-seat-without-commitment
+          :detail "投資実行(commit)されていない案件へのboard seat付与/剥奪提案"}]))))
 
 (defn- term-sheet-missing-violations
   "For `:investment/commit`, at least one term-sheet round must actually
@@ -331,7 +350,8 @@
                            (portfolio-report-requires-commitment-violations request st)
                            (follow-on-requires-prior-commitment-violations request st)
                            (commitment-missing-violations request st)
-                           (clawback-exceeds-entitlement-violations request st)))
+                           (clawback-exceeds-entitlement-violations request st)
+                           (board-seat-requires-commitment-violations request st)))
         conf (:confidence proposal 0.0)
         low? (< conf confidence-floor)
         stakes? (boolean (high-stakes (:stake proposal)))

@@ -33,15 +33,17 @@
   `:actuation/call`/`:actuation/deploy`/`:actuation/distribute`/
   `:actuation/clawback` high-stakes gate (`vcfund.governor`) enforces the
   same invariant independently -- two layers, not one, agree on this.
-  `:deal/advance-stage`, `:term-sheet/propose`, `:term-sheet/sign` and
-  `:portfolio/report` move no capital (governed by HARD checks in
-  `vcfund.governor`, but never `high-stakes`), so they ARE auto-eligible at
-  phase 3 -- a deliberately lighter touch matching their actual risk.")
+  `:deal/advance-stage`, `:term-sheet/propose`, `:term-sheet/sign`,
+  `:portfolio/report` and `:governance/board-seat` move no capital
+  (governed by HARD checks in `vcfund.governor`, but never `high-stakes`),
+  so they ARE auto-eligible at phase 3 -- a deliberately lighter touch
+  matching their actual risk.")
 
 (def read-ops  #{:coverage/report})
 (def write-ops #{:lp/intake :kyc/screen :dd/assess :deal/advance-stage :term-sheet/propose
                  :term-sheet/sign :capital-call/issue :investment/commit :investment/follow-on
-                 :portfolio/report :exit/distribute :waterfall/clawback-repay})
+                 :portfolio/report :exit/distribute :waterfall/clawback-repay
+                 :governance/board-seat})
 
 ;; NOTE the invariant: `:capital-call/issue`, `:investment/commit`,
 ;; `:investment/follow-on`, `:exit/distribute` and `:waterfall/clawback-
@@ -56,7 +58,7 @@
    2 {:label "assisted-dd"     :writes #{:lp/intake :dd/assess :kyc/screen}                       :auto #{}}
    3 {:label "supervised-auto" :writes write-ops
       :auto #{:lp/intake :deal/advance-stage :term-sheet/propose
-             :term-sheet/sign :portfolio/report}}})
+             :term-sheet/sign :portfolio/report :governance/board-seat}}})
 
 (def default-phase 3)
 

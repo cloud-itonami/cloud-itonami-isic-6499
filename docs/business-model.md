@@ -46,11 +46,16 @@
   HARD-gated on the requested amount never exceeding the independently
   recomputed whole-fund entitlement
 - portfolio-company KPI/board-report logging for committed deals
+- board-seat/governance-rights administration (grant and revocation) for
+  committed deals, with a current-roster projection over the append-only
+  event log
 - SAFE/SAFT-conversion, priced-round ownership/dilution (percentage and
   absolute share-count terms), option-pool-shuffle, multi-SAFE conversion,
-  vesting and option-exercise estimates
+  vesting (with single/double-trigger change-of-control acceleration) and
+  option-exercise estimates
 - crypto-native deal support (SAFT token deals, on-chain LP wallet settlement)
-- whole-fund NAV and unfunded-commitment reporting
+- whole-fund NAV, unfunded-commitment and management-fee reporting
+  (optional step-down after the investment period)
 - exit-proceeds waterfall distribution proposal
 - immutable audit ledger
 
@@ -70,9 +75,10 @@
 - a fabricated DD checklist, a sanctions hit, a missing accredited-investor
   affirmation, a call that would overcall an LP past their commitment, a
   commit attempted with no term sheet ever proposed OR with a proposed but
-  unexecuted (not fully signed) term sheet, a follow-on proposed on a deal
-  never committed, or a clawback repayment exceeding the independently
-  recomputed whole-fund entitlement forces a hold, not an override
+  unexecuted (not fully signed) term sheet, a follow-on or a board-seat
+  event proposed on a deal never committed, or a clawback repayment
+  exceeding the independently recomputed whole-fund entitlement forces a
+  hold, not an override
 - LP personal/financial data and portfolio-company confidential data stay
   outside Git
 - every call/commitment/distribution path is auditable

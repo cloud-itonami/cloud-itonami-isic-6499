@@ -1,6 +1,7 @@
 (ns vcfund.registry
   "Pure-function capital-call, investment-commitment (initial AND
-  follow-on), exit-distribution, GP-clawback-repayment and portfolio-report
+  follow-on), exit-distribution, GP-clawback-repayment,
+  portfolio-report and board-seat/governance-rights-administration
   record construction -- an append-only venture-fund
   capital-movement/monitoring draft.
 
@@ -246,6 +247,58 @@
             "period" period
             "kpis" kpis
             "immutable" true}})
+
+(defn register-board-seat-event
+  "Validate + construct a board-seat/governance-rights administration
+  DRAFT event -- one entry (`:granted` or `:revoked`) in a committed
+  deal's append-only board-seat history. `seat-holder` is a party id
+  (typically the fund's own GP representative, or an LP/founder with
+  negotiated board rights); `seat-type` is `:board-member` or
+  `:board-observer`. Pure function -- the actual governance right is
+  negotiated and granted by the term sheet/investment agreement
+  (`register-term-sheet`); this namespace only builds the internal
+  administrative record of who currently holds it. No certificate: like
+  `register-portfolio-report`, this is process state this actor tracks,
+  not a legal instrument it issues. `current-board-seats` folds this
+  append-only log into the CURRENT roster."
+  [deal-id seat-holder seat-type event effective-date sequence]
+  (when-not (and deal-id (not= deal-id ""))
+    (throw (ex-info "board-seat: deal-id required" {})))
+  (when-not (and seat-holder (not= seat-holder ""))
+    (throw (ex-info "board-seat: seat-holder required" {})))
+  (when-not (contains? #{:board-member :board-observer} seat-type)
+    (throw (ex-info "board-seat: seat-type must be :board-member or :board-observer" {})))
+  (when-not (contains? #{:granted :revoked} event)
+    (throw (ex-info "board-seat: event must be :granted or :revoked" {})))
+  (when-not (and effective-date (not= effective-date ""))
+    (throw (ex-info "board-seat: effective-date required" {})))
+  (when (< sequence 0)
+    (throw (ex-info "board-seat: sequence must be >= 0" {})))
+  {"record" {"record_id" (str deal-id "#board-seat-" (zero-pad sequence 4))
+            "kind" "board-seat-event"
+            "deal_id" deal-id
+            "seat_holder" seat-holder
+            "seat_type" (name seat-type)
+            "event" (name event)
+            "effective_date" effective-date
+            "immutable" true}})
+
+(defn current-board-seats
+  "Project the CURRENT board-seat roster for a deal from its append-only
+  event history (`vcfund.store/board-seat-history-of`, oldest first): the
+  LATEST event per `seat_holder` wins, and a holder whose latest event is
+  `:revoked` is dropped from the roster entirely. Pure projection -- never
+  mutates the log itself."
+  [history]
+  (->> history
+       (group-by #(get % "seat_holder"))
+       vals
+       (keep (fn [events]
+               (let [latest (last events)]
+                 (when (= "granted" (get latest "event"))
+                   latest))))
+       (sort-by #(get % "seat_holder"))
+       vec))
 
 (defn register-term-sheet
   "Validate + construct a versioned term-sheet DRAFT record -- one round of

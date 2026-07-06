@@ -61,6 +61,28 @@
   (is (thrown? Exception (nav/management-fee-accrued {:fee-basis 1 :annual-fee-rate -0.02 :years-elapsed 1})))
   (is (thrown? Exception (nav/management-fee-accrued {:fee-basis 1 :annual-fee-rate 0.02 :years-elapsed -1}))))
 
+(deftest management-fee-accrued-step-down-after-investment-period
+  (testing "annual-fee-rate for the first investment-period-years, then post-investment-period-rate afterward"
+    (is (close? 780000.0
+                (nav/management-fee-accrued
+                 {:fee-basis 6000000 :annual-fee-rate 0.02 :years-elapsed 7
+                  :investment-period-years 5 :post-investment-period-rate 0.015})))))
+
+(deftest management-fee-accrued-step-down-within-investment-period-is-unaffected
+  (testing "years-elapsed still within the investment period -- the post-rate never applies"
+    (is (close? 120000.0
+                (nav/management-fee-accrued
+                 {:fee-basis 6000000 :annual-fee-rate 0.02 :years-elapsed 1
+                  :investment-period-years 5 :post-investment-period-rate 0.015})))))
+
+(deftest management-fee-accrued-step-down-validation-rules
+  (is (thrown? Exception (nav/management-fee-accrued
+                          {:fee-basis 1 :annual-fee-rate 0.02 :years-elapsed 1
+                           :investment-period-years -1 :post-investment-period-rate 0.01})))
+  (is (thrown? Exception (nav/management-fee-accrued
+                          {:fee-basis 1 :annual-fee-rate 0.02 :years-elapsed 1
+                           :investment-period-years 5 :post-investment-period-rate -0.01}))))
+
 (deftest fund-nav-defaults-management-fees-to-zero-backward-compatibly
   (let [r (nav/fund-nav {:total-called 2000000 :total-invested-at-cost 2000000
                          :total-exit-proceeds-received 0 :total-distributed-to-lps 0
@@ -113,3 +135,14 @@
     (let [r (nav/fund-nav-report db {:fund-life-years 2})]
       (is (close? 240000.0 (:management-fees-accrued r)))
       (is (close? 1760000.0 (:nav r))))))
+
+(deftest fund-nav-report-applies-the-step-down-when-supplied
+  (let [db (store/seed-db)]
+    (store/commit-record! db {:effect :capital-call/mark-issued :path ["deal-1"]
+                              :payload {:jurisdiction "USA" :call-amount 2000000 :notice-date "2026-07-06"}})
+    (store/commit-record! db {:effect :investment/mark-committed :path ["deal-1"]})
+    ;; total LP commitments = 6M; 5y @ 2% (investment period) + 2y @ 1.5% (post) = 600,000 + 180,000
+    (let [r (nav/fund-nav-report db {:fund-life-years 7
+                                     :investment-period-years 5
+                                     :post-investment-period-rate 0.015})]
+      (is (close? 780000.0 (:management-fees-accrued r))))))

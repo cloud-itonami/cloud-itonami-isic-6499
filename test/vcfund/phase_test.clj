@@ -40,9 +40,14 @@
   (is (empty? (:writes (get phase/phases 0)))))
 
 (deftest phase-3-auto-commits-only-the-no-capital-risk-ops
-  (testing ":lp/intake, :deal/advance-stage, :term-sheet/propose, :term-sheet/sign and :portfolio/report move no capital -- auto-eligible"
-    (is (= #{:lp/intake :deal/advance-stage :term-sheet/propose :term-sheet/sign :portfolio/report}
+  (testing ":lp/intake, :deal/advance-stage, :term-sheet/propose, :term-sheet/sign, :portfolio/report and :governance/board-seat move no capital -- auto-eligible"
+    (is (= #{:lp/intake :deal/advance-stage :term-sheet/propose :term-sheet/sign
+             :portfolio/report :governance/board-seat}
            (:auto (get phase/phases 3))))))
+
+(deftest governance-board-seat-never-blocked-from-auto-at-phase-3
+  (testing "structural: board-seat administration is auto-eligible (no capital risk), unlike the four actuation ops"
+    (is (= :commit (:disposition (phase/gate 3 {:op :governance/board-seat} :commit))))))
 
 (deftest gate-hold-always-wins
   (is (= :hold (:disposition (phase/gate 3 {:op :lp/intake} :hold)))))

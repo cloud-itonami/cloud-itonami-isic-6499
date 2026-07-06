@@ -38,6 +38,7 @@
       (is (= [] (store/signature-history-of s "deal-1")))
       (is (= [] (store/follow-on-history-of s "deal-1")))
       (is (= [] (store/clawback-repayment-history s)))
+      (is (= [] (store/board-seat-history-of s "deal-1")))
       (is (zero? (store/next-sequence s "USA")))
       (is (zero? (store/call-sequence s "USA")))
       (is (zero? (store/follow-on-sequence s "USA"))))))
@@ -101,6 +102,13 @@
             "a follow-on does not change the deal's lifecycle status")
         (is (= 1 (count (store/follow-on-history-of s "deal-1"))))
         (is (= 1 (store/follow-on-sequence s "USA"))))
+      (testing "board-seat grant records a governance-rights event for the now-committed deal"
+        (store/commit-record! s {:effect :governance/board-seat-recorded :path ["deal-1"]
+                                 :payload {:seat-holder "party-1" :seat-type :board-member
+                                           :event :granted :effective-date "2026-07-06"}})
+        (is (= "deal-1#board-seat-0000" (get (first (store/board-seat-history-of s "deal-1")) "record_id")))
+        (is (= "board-seat-event" (get (first (store/board-seat-history-of s "deal-1")) "kind")))
+        (is (= 1 (count (store/board-seat-history-of s "deal-1")))))
       (testing "portfolio report logs a KPI record for the now-committed deal"
         (store/commit-record! s {:effect :portfolio/report-logged :path ["deal-1"]
                                  :payload {:period "2026-Q3" :kpis {:revenue 450000}}})

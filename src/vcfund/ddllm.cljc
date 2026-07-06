@@ -264,6 +264,29 @@
      :stake      :actuation/deploy
      :confidence (if docs-ok? 0.9 0.3)}))
 
+(defn- propose-board-seat
+  "Draft a board-seat/governance-rights administration event -- granting
+  or revoking a board seat/observer right for an already-committed deal.
+  `:seat-holder`/`:seat-type`/`:event`/`:effective-date` are REAL facts
+  about the negotiated governance right supplied by the caller (the term
+  sheet/investment agreement is the actual legal grant -- see
+  `propose-term-sheet`), never invented here. No capital moves here, so
+  `:stake` is nil -- not actuation."
+  [db {:keys [subject seat-holder seat-type event effective-date]}]
+  (let [d (store/deal db subject)
+        committed? (contains? #{:committed :exited} (:status d))]
+    {:summary    (str subject ": " seat-holder " へのboard seat " (name event) " (" (name seat-type) ")"
+                      (when-not committed? " (commit未実行)"))
+     :rationale  (if committed?
+                   "committed dealへの正規のガバナンス権利管理"
+                   "投資実行されていない案件へのboard seat操作は不可")
+     :cites      [(name event) (name seat-type)]
+     :effect     :governance/board-seat-recorded
+     :value      {:deal-id subject :seat-holder seat-holder :seat-type seat-type
+                  :event event :effective-date effective-date}
+     :stake      nil
+     :confidence (if committed? 0.9 0.2)}))
+
 (defn- propose-follow-on
   "Draft a FOLLOW-ON investment-commitment action -- deploying ADDITIONAL
   real fund capital into a portfolio company the fund ALREADY holds an
@@ -352,6 +375,7 @@
     :investment/commit  (propose-commit db request)
     :investment/follow-on (propose-follow-on db request)
     :portfolio/report   (propose-portfolio-report db request)
+    :governance/board-seat (propose-board-seat db request)
     :exit/distribute    (propose-distribute db request)
     :waterfall/clawback-repay (propose-clawback-repayment db request)
     {:summary "未対応の操作" :rationale (str op) :cites []
@@ -375,7 +399,8 @@
        ":effect(:lp/upsert|:assessment/set|:kyc/set|:deal/advance-stage|"
        ":term-sheet/proposed|:term-sheet/signed|:capital-call/mark-issued|"
        ":investment/mark-committed|:investment/follow-on-committed|"
-       ":portfolio/report-logged|:distribution/mark-paid|:waterfall/clawback-repaid) "
+       ":portfolio/report-logged|:governance/board-seat-recorded|"
+       ":distribution/mark-paid|:waterfall/clawback-repaid) "
        ":stake(:actuation/call|:actuation/deploy|:actuation/distribute|"
        ":actuation/clawback|nil) :confidence(0..1)。\n"
        "重要: 登録されていない法域のfund-formation/exemption要件を絶対に創作してはいけません。"
@@ -396,6 +421,8 @@
     :investment/follow-on {:deal (store/deal st subject)
                            :commitment (store/commitment-of st subject)}
     :portfolio/report   {:deal (store/deal st subject)}
+    :governance/board-seat {:deal (store/deal st subject)
+                            :board-seat-history (store/board-seat-history-of st subject)}
     :exit/distribute    {:deal (store/deal st subject)
                          :commitment (store/commitment-of st subject)}
     :waterfall/clawback-repay {:commitment-history (store/commitment-history st)

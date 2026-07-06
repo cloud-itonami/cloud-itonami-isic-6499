@@ -6,18 +6,19 @@
   (always escalates) -> human approval -> commit -> investment-commitment
   proposal (always escalates) -> human approval -> commit -> follow-on
   investment proposal (always escalates) -> human approval -> commit ->
-  portfolio KPI report (auto-commits) -> exit-distribution proposal
-  (always escalates) -> human approval -> commit -> whole-fund GP-clawback
-  reconciliation + repayment proposal (always escalates) -> human approval
-  -> commit, then shows eight HARD holds (a sanctions hit, a fabricated
-  jurisdiction, an overcalled capital call, an illegal pipeline-stage
-  transition, a term-sheet proposal on an already-committed deal, an
-  investment-commit attempt with an unsigned term sheet, a follow-on
-  proposed on a deal that was never committed, and a clawback repayment
-  request exceeding the independently-recomputed whole-fund entitlement)
-  that never reach a human at all, and prints the audit ledger + the
-  draft capital-call/commitment/follow-on/distribution/clawback-repayment/
-  portfolio-report/term-sheet records."
+  board-seat grant (auto-commits, no capital risk) -> portfolio KPI report
+  (auto-commits) -> exit-distribution proposal (always escalates) -> human
+  approval -> commit -> whole-fund GP-clawback reconciliation + repayment
+  proposal (always escalates) -> human approval -> commit, then shows nine
+  HARD holds (a sanctions hit, a fabricated jurisdiction, an overcalled
+  capital call, an illegal pipeline-stage transition, a term-sheet
+  proposal on an already-committed deal, an investment-commit attempt
+  with an unsigned term sheet, a follow-on proposed on a deal that was
+  never committed, a board-seat grant on a deal that was never committed,
+  and a clawback repayment request exceeding the independently-recomputed
+  whole-fund entitlement) that never reach a human at all, and prints the
+  audit ledger + the draft capital-call/commitment/follow-on/board-seat/
+  distribution/clawback-repayment/portfolio-report/term-sheet records."
   (:require [langgraph.graph :as g]
             [vcfund.store :as store]
             [vcfund.waterfall :as waterfall]
@@ -80,6 +81,11 @@
       (println "-- human Investment Committee approves --")
       (println (approve! actor "t4a")))
 
+    (println "== governance/board-seat deal-1 -- party-1 granted a board-member seat (no capital risk; auto-commits) ==")
+    (println (exec! actor "t4c" {:op :governance/board-seat :subject "deal-1"
+                                :seat-holder "party-1" :seat-type :board-member
+                                :event :granted :effective-date "2026-07-06"} operator))
+
     (println "== portfolio/report deal-1 (Q3 KPIs on a committed deal; no capital risk; auto-commits) ==")
     (println (exec! actor "t4b" {:op :portfolio/report :subject "deal-1" :period "2026-Q3"
                                 :kpis {:revenue 450000 :burn-rate 80000 :runway-months 14 :headcount 12}} operator))
@@ -127,6 +133,11 @@
     (println (exec! actor "t12" {:op :investment/follow-on :subject "deal-2"
                                  :security-type :priced-equity :amount 100000} operator))
 
+    (println "== governance/board-seat deal-2 (deal-2 was never committed -> HARD hold, never reaches a human) ==")
+    (println (exec! actor "t14" {:op :governance/board-seat :subject "deal-2"
+                                 :seat-holder "party-1" :seat-type :board-observer
+                                 :event :granted :effective-date "2026-07-06"} operator))
+
     (println "== waterfall/clawback-repay whole-fund (requesting far more than the independently-recomputed entitlement -> HARD hold) ==")
     (println (exec! actor "t13" {:op :waterfall/clawback-repay :subject "fund"
                                  :amount 999999999 :effective-date "2026-07-06"
@@ -143,6 +154,9 @@
 
     (println "== draft follow-on investment-commitment records (deal-1) ==")
     (doseq [r (store/follow-on-history-of db "deal-1")] (println r))
+
+    (println "== draft board-seat/governance-rights event records (deal-1) ==")
+    (doseq [r (store/board-seat-history-of db "deal-1")] (println r))
 
     (println "== draft portfolio-report records (deal-1) ==")
     (doseq [r (store/portfolio-reports-of db "deal-1")] (println r))

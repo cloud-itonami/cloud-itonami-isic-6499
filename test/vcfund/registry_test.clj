@@ -215,6 +215,42 @@
                                                   :preferred-return-rate 0.08 :holding-period-years 1
                                                   :carry-rate 1.5}))))
 
+;; ----------------------------- board seats / governance rights -----------------------------
+
+(deftest board-seat-event-has-no-certificate
+  (let [result (r/register-board-seat-event "deal-1" "party-1" :board-member :granted "2026-07-06" 0)]
+    (is (nil? (get result "certificate")) "an internal administrative record, not a legal instrument this actor issues")
+    (is (= (get-in result ["record" "record_id"]) "deal-1#board-seat-0000"))
+    (is (= (get-in result ["record" "kind"]) "board-seat-event"))
+    (is (= (get-in result ["record" "seat_holder"]) "party-1"))
+    (is (= (get-in result ["record" "seat_type"]) "board-member"))
+    (is (= (get-in result ["record" "event"]) "granted"))
+    (is (= (get-in result ["record" "immutable"]) true))))
+
+(deftest board-seat-event-accepts-observer-seats-and-revocation
+  (let [result (r/register-board-seat-event "deal-1" "party-1" :board-observer :revoked "2027-01-01" 1)]
+    (is (= (get-in result ["record" "seat_type"]) "board-observer"))
+    (is (= (get-in result ["record" "event"]) "revoked"))))
+
+(deftest board-seat-event-validation-rules
+  (is (thrown? Exception (r/register-board-seat-event "" "party-1" :board-member :granted "2026-07-06" 0)))
+  (is (thrown? Exception (r/register-board-seat-event "deal-1" "" :board-member :granted "2026-07-06" 0)))
+  (is (thrown? Exception (r/register-board-seat-event "deal-1" "party-1" :not-a-real-seat-type :granted "2026-07-06" 0)))
+  (is (thrown? Exception (r/register-board-seat-event "deal-1" "party-1" :board-member :not-a-real-event "2026-07-06" 0)))
+  (is (thrown? Exception (r/register-board-seat-event "deal-1" "party-1" :board-member :granted "" 0)))
+  (is (thrown? Exception (r/register-board-seat-event "deal-1" "party-1" :board-member :granted "2026-07-06" -1))))
+
+(deftest current-board-seats-projects-the-latest-event-per-holder
+  (let [history [(get (r/register-board-seat-event "deal-1" "party-1" :board-member :granted "2026-01-01" 0) "record")
+                (get (r/register-board-seat-event "deal-1" "party-2" :board-observer :granted "2026-02-01" 1) "record")
+                (get (r/register-board-seat-event "deal-1" "party-1" :board-member :revoked "2026-06-01" 2) "record")]
+        roster (r/current-board-seats history)]
+    (is (= 1 (count roster)) "party-1's seat was revoked, so only party-2 remains")
+    (is (= "party-2" (get (first roster) "seat_holder")))))
+
+(deftest current-board-seats-empty-history-is-an-empty-roster
+  (is (= [] (r/current-board-seats []))))
+
 ;; ----------------------------- follow-on commitments -----------------------------
 
 (deftest follow-on-certificate-is-a-draft-not-a-real-commitment

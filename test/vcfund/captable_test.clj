@@ -158,6 +158,45 @@
   (is (thrown? Exception (captable/vesting-schedule {:total-shares 1 :vesting-months 48 :cliff-months 60 :months-elapsed 1})))
   (is (thrown? Exception (captable/vesting-schedule {:total-shares 1 :vesting-months 48 :cliff-months 12 :months-elapsed -1}))))
 
+;; ----------------------------- accelerated-vesting -----------------------------
+
+(deftest accelerated-vesting-single-trigger-fires-on-change-of-control-alone
+  (testing "before the cliff, still 100% vests immediately under a single-trigger change-of-control"
+    (let [r (captable/accelerated-vesting {:total-shares 48000 :vesting-months 48 :cliff-months 12
+                                           :months-elapsed 6 :trigger :single :change-of-control? true})]
+      (is (true? (:accelerated? r)))
+      (is (true? (:cliff-reached? r)))
+      (is (close? 48000.0 (:vested-shares r)))
+      (is (close? 1.0 (:vested-pct r))))))
+
+(deftest accelerated-vesting-single-trigger-does-not-fire-without-a-change-of-control
+  (let [r (captable/accelerated-vesting {:total-shares 48000 :vesting-months 48 :cliff-months 12
+                                         :months-elapsed 36 :trigger :single :change-of-control? false})]
+    (is (false? (:accelerated? r)))
+    (is (close? 36000.0 (:vested-shares r)) "falls back to the ordinary vesting-schedule result")))
+
+(deftest accelerated-vesting-double-trigger-requires-both-change-of-control-and-termination
+  (let [both (captable/accelerated-vesting {:total-shares 48000 :vesting-months 48 :cliff-months 12
+                                            :months-elapsed 6 :trigger :double
+                                            :change-of-control? true :terminated? true})
+        coc-only (captable/accelerated-vesting {:total-shares 48000 :vesting-months 48 :cliff-months 12
+                                                :months-elapsed 6 :trigger :double
+                                                :change-of-control? true :terminated? false})
+        term-only (captable/accelerated-vesting {:total-shares 48000 :vesting-months 48 :cliff-months 12
+                                                 :months-elapsed 6 :trigger :double
+                                                 :change-of-control? false :terminated? true})]
+    (is (true? (:accelerated? both)))
+    (is (close? 48000.0 (:vested-shares both)))
+    (is (false? (:accelerated? coc-only)) "change-of-control alone does not fire a double-trigger provision")
+    (is (false? (:accelerated? term-only)) "termination alone (no change-of-control) does not fire it either")))
+
+(deftest accelerated-vesting-validation-rules
+  (is (thrown? Exception (captable/accelerated-vesting {:total-shares 1 :vesting-months 48 :cliff-months 12
+                                                        :months-elapsed 1 :trigger :triple})))
+  (is (thrown? Exception (captable/accelerated-vesting {:total-shares -1 :vesting-months 48 :cliff-months 12
+                                                        :months-elapsed 1 :trigger :single :change-of-control? true}))
+      "still reuses vesting-schedule's own validation"))
+
 ;; ----------------------------- option-exercise-economics -----------------------------
 
 (deftest option-exercise-economics-computes-intrinsic-value

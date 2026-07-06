@@ -45,6 +45,7 @@
   (signature-history-of [s deal-id] "the append-only term-sheet e-signature history for one deal, oldest first")
   (follow-on-history-of [s deal-id] "the append-only follow-on investment-commitment history for one deal, oldest first")
   (clawback-repayment-history [s] "the append-only, fund-level (not deal-scoped) GP-clawback-repayment history")
+  (board-seat-history-of [s deal-id] "the append-only board-seat/governance-rights event history for one deal, oldest first")
   (next-sequence [s jurisdiction] "next commitment-number sequence for a jurisdiction")
   (call-sequence [s jurisdiction] "next capital-call-number sequence for a jurisdiction")
   (follow-on-sequence [s jurisdiction] "next follow-on-number sequence for a jurisdiction")
@@ -141,6 +142,17 @@
         result (registry/register-clawback-repayment amount seq-n effective-date)]
     {:result result}))
 
+(defn- record-board-seat!
+  "Backend-agnostic `:governance/board-seat` -- drafts one board-seat
+  grant/revocation event and returns {:result ..} for the caller to
+  persist (append-only per-deal history; `vcfund.registry/current-board-
+  seats` projects the CURRENT roster from it, never mutating the log)."
+  [s deal-id {:keys [seat-holder seat-type event effective-date]}]
+  (let [seq-n (count (board-seat-history-of s deal-id))
+        result (registry/register-board-seat-event
+                deal-id seat-holder seat-type event effective-date seq-n)]
+    {:result result}))
+
 (defn- distribute-exit!
   "Backend-agnostic `:distribution/mark-paid` -- looks up the deal's
   committed investment, computes the deal-by-deal waterfall from the
@@ -183,6 +195,7 @@
   (signature-history-of [_ deal-id] (get-in @a [:term-sheet-signatures deal-id] []))
   (follow-on-history-of [_ deal-id] (get-in @a [:follow-on-history deal-id] []))
   (clawback-repayment-history [_] (:clawback-repayment-history @a))
+  (board-seat-history-of [_ deal-id] (get-in @a [:board-seats deal-id] []))
   (next-sequence [_ jurisdiction]
     (get-in @a [:sequences jurisdiction] 0))
   (call-sequence [_ jurisdiction]
@@ -258,6 +271,12 @@
                        (update-in [:follow-on-history deal-id] (fnil registry/append []) result))))
         result)
 
+      :governance/board-seat-recorded
+      (let [deal-id (first path)
+            {:keys [result]} (record-board-seat! s deal-id payload)]
+        (swap! a update-in [:board-seats deal-id] (fnil registry/append []) result)
+        result)
+
       :distribution/mark-paid
       (let [deal-id (first path)
             {:keys [result deal-patch]} (distribute-exit! s deal-id payload)]
@@ -287,7 +306,8 @@
                            :commitments {} :commitment-history []
                            :capital-call-history [] :distribution-history []
                            :portfolio-reports {} :term-sheets {} :term-sheet-signatures {}
-                           :follow-on-history {} :clawback-repayment-history []))))
+                           :follow-on-history {} :clawback-repayment-history []
+                           :board-seats {}))))
 
 ;; ----------------------------- DatomicStore (langchain.db) -----------------------------
 
@@ -314,7 +334,8 @@
    :term-sheet-signature/seq {:db/unique :db.unique/identity}
    :follow-on/seq {:db/unique :db.unique/identity}
    :follow-on-sequence/jurisdiction {:db/unique :db.unique/identity}
-   :clawback-repayment/seq {:db/unique :db.unique/identity}})
+   :clawback-repayment/seq {:db/unique :db.unique/identity}
+   :board-seat/seq {:db/unique :db.unique/identity}})
 
 (defn- enc [v] (pr-str v))
 (defn- dec* [s] (when s (edn/read-string s)))
@@ -351,6 +372,12 @@
   deal-scoped, so this is already the only count the identity needs."
   [conn]
   (count (d/q '[:find [?s ...] :where [?e :clawback-repayment/seq ?s]] (d/db conn))))
+
+(defn- board-seat-count
+  "Global count of board-seat-event entities across ALL deals -- same
+  `:ledger/seq`-style global-identity convention as `term-sheet-count`."
+  [conn]
+  (count (d/q '[:find [?s ...] :where [?e :board-seat/seq ?s]] (d/db conn))))
 
 (defn- lp->tx [{:keys [id name commitment-amount called-amount currency jurisdiction
                        accredited? status wallet-address]}]
@@ -494,6 +521,14 @@
     (->> (d/q '[:find ?s ?r :where [?e :clawback-repayment/seq ?s] [?e :clawback-repayment/record ?r]] (d/db conn))
          (sort-by first)
          (mapv (comp dec* second))))
+  (board-seat-history-of [_ deal-id]
+    (->> (d/q '[:find ?s ?r :in $ ?did
+               :where [?e :board-seat/deal-id ?did]
+                      [?e :board-seat/seq ?s]
+                      [?e :board-seat/record ?r]]
+              (d/db conn) deal-id)
+         (sort-by first)
+         (mapv (comp dec* second))))
   (next-sequence [_ jurisdiction]
     (or (d/q '[:find ?n . :in $ ?j
               :where [?e :sequence/jurisdiction ?j] [?e :sequence/next ?n]]
@@ -587,6 +622,14 @@
                       {:follow-on/seq (follow-on-count conn)
                        :follow-on/deal-id deal-id
                        :follow-on/record (enc (get result "record"))}])
+        result)
+
+      :governance/board-seat-recorded
+      (let [deal-id (first path)
+            {:keys [result]} (record-board-seat! s deal-id payload)]
+        (d/transact! conn [{:board-seat/seq (board-seat-count conn)
+                           :board-seat/deal-id deal-id
+                           :board-seat/record (enc (get result "record"))}])
         result)
 
       :distribution/mark-paid

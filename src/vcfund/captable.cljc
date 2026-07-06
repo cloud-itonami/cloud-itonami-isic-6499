@@ -22,8 +22,12 @@
   system/transfer agent.
 
   Still deliberately SIMPLIFIED, and honestly so: `vesting-schedule` is
-  linear-with-cliff only (no accelerated vesting on a change-of-control,
-  no double-trigger provisions); `option-exercise-economics` is intrinsic
+  linear-with-cliff only; `accelerated-vesting` layers single-trigger
+  (change-of-control alone) OR double-trigger (change-of-control AND
+  involuntary termination) full acceleration on top of it, but only ONE
+  acceleration event per call -- no partial-acceleration provisions (e.g.
+  \"12 months of additional vesting\" rather than 100%), which some real
+  grants negotiate instead; `option-exercise-economics` is intrinsic
   value only (no tax treatment -- ISO vs. NSO, AMT, 83(b) elections);
   `multi-safe-conversion-shares` assumes every SAFE converts against the
   SAME `pre-conversion-shares` baseline (no modeling of conversion order
@@ -259,7 +263,8 @@
 
   Returns `{:vested-shares :vested-pct :cliff-reached?}`. Deliberately
   does NOT model accelerated vesting on a change-of-control or
-  double-trigger provisions -- see ns docstring."
+  double-trigger provisions itself -- see `accelerated-vesting`, which
+  layers that on top of this fn."
   [{:keys [total-shares vesting-months cliff-months months-elapsed]}]
   (when (neg? total-shares)
     (throw (ex-info "vesting-schedule: total-shares must be >= 0" {})))
@@ -278,6 +283,38 @@
     {:vested-shares vested-shares
      :vested-pct (if (zero? total-shares) 0.0 (/ vested-shares total-shares))
      :cliff-reached? cliff-reached?}))
+
+(defn accelerated-vesting
+  "Change-of-control vesting acceleration on top of `vesting-schedule`'s
+  ordinary linear-with-cliff schedule. `trigger` is `:single` (100% of
+  the grant vests immediately upon a change-of-control alone, no
+  termination required) or `:double` (100% vests ONLY if a
+  change-of-control occurred AND the holder was involuntarily terminated
+  -- pass `:change-of-control?`/`:terminated?` matching the actual
+  grant's negotiated provision, never invented here). Takes every
+  `vesting-schedule` key PLUS `trigger`/`:change-of-control?`/
+  `:terminated?`; reuses `vesting-schedule`'s own validation rather than
+  duplicating it.
+
+  Returns `vesting-schedule`'s map plus `:accelerated?` (whether
+  acceleration actually fired THIS call). Only ONE acceleration event is
+  modeled (100% or nothing) -- see ns docstring for what a partial-
+  acceleration provision would need that this does not model."
+  [{:keys [trigger change-of-control? terminated? total-shares] :as args}]
+  (when-not (contains? #{:single :double} trigger)
+    (throw (ex-info "accelerated-vesting: trigger must be :single or :double" {})))
+  (let [ordinary (vesting-schedule (dissoc args :trigger :change-of-control? :terminated?))
+        fires? (case trigger
+                 :single (boolean change-of-control?)
+                 :double (boolean (and change-of-control? terminated?)))
+        total-shares (double total-shares)]
+    (if fires?
+      (assoc ordinary
+             :vested-shares total-shares
+             :vested-pct (if (zero? total-shares) 0.0 1.0)
+             :cliff-reached? true
+             :accelerated? true)
+      (assoc ordinary :accelerated? false))))
 
 (defn option-exercise-economics
   "Intrinsic value of exercising `shares` stock options at `strike-price`

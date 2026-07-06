@@ -515,3 +515,80 @@ real e-signature PROVIDER integration and redlining UI, order-dependent
 multi-SAFE simultaneous-conversion solving, board-seat/governance-rights
 administration, management-fee step-downs, vesting acceleration/option
 tax treatment, multi-currency FX, tax/regulatory reporting.
+
+## Addendum 7 (2026-07-06, same day, autonomous /loop iteration): governed board-seat/governance-rights op, management-fee step-down, change-of-control vesting acceleration
+
+Again no new explicit owner direction -- the recurring `/loop` prompt
+asked for coverage/maturity improvement, so this autonomously picked
+three items off Addendum 6's remaining-gaps list: "board-seat/governance-
+rights administration," "management-fee step-downs" and "vesting
+acceleration." Real e-signature-provider integration, order-dependent
+multi-SAFE solving, option tax treatment, multi-currency FX and tax/
+regulatory reporting remain out of scope -- either a genuine third-party-
+integration boundary (like the operator-supplied KYC/AML program) or a
+larger lift than one iteration's scope.
+
+- **Board-seat/governance-rights administration** -- new op
+  `:governance/board-seat` (subject = deal-id, `:seat-holder`/
+  `:seat-type`/`:event`/`:effective-date` real facts supplied by the
+  caller). `vcfund.registry/register-board-seat-event` drafts a
+  `deal-1#board-seat-0000`-style append-only event (`:granted` or
+  `:revoked`; NO certificate, the same posture `register-portfolio-
+  report` takes -- the actual governance right is negotiated and granted
+  by the term sheet, this is the internal administrative record of who
+  currently holds it). `vcfund.registry/current-board-seats` is a pure
+  projection folding the event log into the CURRENT roster (latest event
+  per `seat_holder` wins; a holder whose latest event is `:revoked` drops
+  out entirely). Append-only per-deal history
+  (`vcfund.store/board-seat-history-of`, both backends). **New HARD
+  check, `board-seat-requires-commitment-violations`** -- the deal must
+  actually be `:committed`/`:exited`, the same check
+  `portfolio-report-requires-commitment-violations` runs for KPI reports.
+  Unlike every op added in Addenda 1-6, this one is NOT actuation (no
+  capital moves) -- `:stake` is nil, and it joins `:deal/advance-stage`/
+  `:term-sheet/propose`/`:term-sheet/sign`/`:portfolio/report` as
+  auto-eligible at phase 3, the deliberately lighter-touch tier for
+  non-capital-risk ops.
+- **Management-fee step-down** (`vcfund.nav/management-fee-accrued`) --
+  OPTIONAL `:investment-period-years`/`:post-investment-period-rate`
+  keys model the common LPA shape (e.g. 2% during the investment period,
+  a lower rate after); omitting both keeps the exact flat-rate behavior
+  every earlier caller relies on, so this is purely additive/backward
+  compatible, not a breaking change to the existing signature.
+  `fund-nav-report` passes the new keys through unchanged when supplied.
+  Still honestly simplified to ONE step (a multi-step-down schedule, or a
+  re-based fee basis after the step, is not modeled).
+- **Change-of-control vesting acceleration** (`vcfund.captable/
+  accelerated-vesting`, new fn) -- layers single-trigger (change-of-
+  control alone) or double-trigger (change-of-control AND involuntary
+  termination) full acceleration on top of `vesting-schedule`, reusing
+  that fn's own validation rather than duplicating it (`dissoc`s the
+  acceleration-specific keys before delegating). Returns the ordinary
+  `vesting-schedule` map plus `:accelerated?`. Only ONE acceleration
+  event is modeled (100% or nothing) -- a partial-acceleration provision
+  (e.g. "12 months of additional vesting") is not.
+- `vcfund.phase/write-ops` grew to include `:governance/board-seat`; it
+  is ALSO the sixth member of phase 3's `:auto` set (unlike the four
+  actuation ops, which are permanently excluded from every phase's
+  `:auto` set -- see the standing invariant comment in `phase.cljc`).
+  `vcfund.ddllm` gained `propose-board-seat`, wired into `infer`/
+  `facts-for`/the system-prompt string. Governor docstring/check-count
+  renumbered: 14 HARD + 1 soft -> 15 HARD + 1 soft (sixteen total).
+
+Consequences: `test/vcfund/*` grew from 126 tests/521 assertions to 142
+tests/571 assertions (new `register-board-seat-event`/`current-board-
+seats` tests in `registry_test.clj`; `accelerated-vesting` tests in
+`captable_test.clj`; management-fee step-down tests in `nav_test.clj`
+(pure fn AND `fund-nav-report` integration); board-seat parity tests
+across both `Store` backends in `store_contract_test.clj`;
+`board-seat-without-commitment-is-held`/`board-seat-auto-commits-once-
+deal-is-committed` in `governor_contract_test.clj`; auto-eligibility
+structural tests in `phase_test.clj`), still lint-clean; demo (`clojure
+-M:dev:run`) now walks a board-seat grant through the no-approval
+auto-commit path (alongside the existing follow-on/clawback flows) plus a
+new HARD hold (a board-seat grant on a never-committed deal). Remaining
+honest gaps (tracked in README's "Business-process coverage" table): a
+real e-signature PROVIDER integration and redlining UI, order-dependent
+multi-SAFE simultaneous-conversion solving, option tax treatment (ISO/
+NSO/AMT, 83(b)), multi-currency FX, tax/regulatory reporting (K-1s, Form
+D/ADV).

@@ -17,13 +17,15 @@
       has zero I/O dependency.
 
   Honest limitations (see docstrings): `management-fee-accrued` is a flat,
-  non-compounded annual rate with no step-down after the investment
-  period (a real LPA's fee schedule often steps down, e.g. 2% -> 1.5%,
-  around year 5 -- not modeled here), no multi-currency FX conversion
-  (assumes one fund base currency), a deal's fair value defaults to its
-  cost basis (the commitment amount) until an operator records a
-  `:fair-value-mark` KPI via `:portfolio/report` -- never silently mark up
-  an unvalued investment."
+  non-compounded annual rate, OPTIONALLY with a single step-down after an
+  investment period (a real LPA's fee schedule often steps down, e.g.
+  2% -> 1.5%, around year 5 -- see `:investment-period-years`/
+  `:post-investment-period-rate`; a fund with more than one step, or a
+  compounding/re-basing schedule, is still not modeled), no multi-currency
+  FX conversion (assumes one fund base currency), a deal's fair value
+  defaults to its cost basis (the commitment amount) until an operator
+  records a `:fair-value-mark` KPI via `:portfolio/report` -- never
+  silently mark up an unvalued investment."
   (:require [vcfund.store :as store]))
 
 (def default-management-fee-rate
@@ -58,13 +60,36 @@
   fund's investment period; some LPAs switch the basis to invested-at-cost
   capital afterward -- this fn does not decide which regime applies, the
   caller supplies `fee-basis` matching the fund's actual LPA provision).
-  Honestly simplified: no step-down after the investment period (see ns
-  docstring)."
-  [{:keys [fee-basis annual-fee-rate years-elapsed]}]
+
+  OPTIONALLY models a single step-down after the investment period: pass
+  `:investment-period-years` and `:post-investment-period-rate` to accrue
+  `annual-fee-rate` for the first `investment-period-years` years and
+  `post-investment-period-rate` for every year after -- the common LPA
+  shape (e.g. 2% during the investment period, 1.5% after). Omit both
+  (the default) for the flat single-rate behavior every earlier caller
+  already relies on -- fully backward compatible. Honestly simplified:
+  only ONE step is modeled (a fund with multiple step-downs, or a
+  re-based fee basis after the step, is not)."
+  [{:keys [fee-basis annual-fee-rate years-elapsed
+           investment-period-years post-investment-period-rate]}]
   (when (neg? fee-basis) (throw (ex-info "management-fee-accrued: fee-basis must be >= 0" {})))
   (when (neg? annual-fee-rate) (throw (ex-info "management-fee-accrued: annual-fee-rate must be >= 0" {})))
   (when (neg? years-elapsed) (throw (ex-info "management-fee-accrued: years-elapsed must be >= 0" {})))
-  (* (double fee-basis) (double annual-fee-rate) (double years-elapsed)))
+  (when (and investment-period-years (neg? investment-period-years))
+    (throw (ex-info "management-fee-accrued: investment-period-years must be >= 0" {})))
+  (when (and post-investment-period-rate (neg? post-investment-period-rate))
+    (throw (ex-info "management-fee-accrued: post-investment-period-rate must be >= 0" {})))
+  (let [fee-basis (double fee-basis)
+        annual-fee-rate (double annual-fee-rate)
+        years-elapsed (double years-elapsed)]
+    (if (and investment-period-years post-investment-period-rate)
+      (let [investment-period-years (double investment-period-years)
+            post-investment-period-rate (double post-investment-period-rate)
+            in-period-years (min years-elapsed investment-period-years)
+            post-period-years (max 0.0 (- years-elapsed investment-period-years))]
+        (+ (* fee-basis annual-fee-rate in-period-years)
+           (* fee-basis post-investment-period-rate post-period-years)))
+      (* fee-basis annual-fee-rate years-elapsed))))
 
 (defn fund-nav
   "Whole-fund NAV = net cash + fair value of still-held (un-exited)
@@ -123,9 +148,12 @@
   `fund-life-years` -- OPTIONAL, defaults to 0 (no fee accrual, backward
   compatible). Years since the fund's first close -- a REAL external fact
   the caller supplies, never inferred; management fees accrue on total LP
-  commitments at `annual-fee-rate` (default `default-management-fee-rate`)."
+  commitments at `annual-fee-rate` (default `default-management-fee-rate`).
+  `investment-period-years`/`post-investment-period-rate` -- OPTIONAL, see
+  `management-fee-accrued` for the step-down they model; omit both for the
+  flat-rate default."
   ([st] (fund-nav-report st {}))
-  ([st {:keys [fund-life-years annual-fee-rate]
+  ([st {:keys [fund-life-years annual-fee-rate investment-period-years post-investment-period-rate]
         :or {fund-life-years 0 annual-fee-rate default-management-fee-rate}}]
   (let [lps (store/all-lps st)
         committed-deals (filter #(contains? #{:committed :exited} (:status %)) (store/all-deals st))
@@ -140,7 +168,9 @@
         management-fees-accrued (management-fee-accrued
                                   {:fee-basis (reduce + (map #(double (:commitment-amount %)) lps))
                                    :annual-fee-rate annual-fee-rate
-                                   :years-elapsed fund-life-years})
+                                   :years-elapsed fund-life-years
+                                   :investment-period-years investment-period-years
+                                   :post-investment-period-rate post-investment-period-rate})
         investments (mapv (fn [d]
                             {:deal-id (:id d)
                              :cost-basis (double (:ask-amount d))

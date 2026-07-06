@@ -235,6 +235,37 @@
       (is (not= :interrupted (:status res)))
       (is (= 1 (count (store/portfolio-reports-of db "deal-1")))))))
 
+(deftest board-seat-without-commitment-is-held
+  (testing "a board-seat grant on a deal that was never committed -> HARD hold"
+    (let [[db actor] (fresh)
+          res (exec-op actor "t60" {:op :governance/board-seat :subject "deal-1"
+                                    :seat-holder "party-1" :seat-type :board-member
+                                    :event :granted :effective-date "2026-07-06"} operator)]
+      (is (= :hold (get-in res [:state :disposition])))
+      (is (some #{:board-seat-without-commitment} (-> (store/ledger db) first :basis)))
+      (is (empty? (store/board-seat-history-of db "deal-1"))))))
+
+(deftest board-seat-auto-commits-once-deal-is-committed
+  (testing "no capital risk -- a board-seat grant on an already-committed deal auto-commits, no approval needed"
+    (let [[db actor] (fresh)
+          _ (exec-op actor "t61a" {:op :dd/assess :subject "deal-1"} operator)
+          _ (approve! actor "t61a")
+          _ (exec-op actor "t61b" {:op :kyc/screen :subject "party-1"} operator)
+          _ (approve! actor "t61b")
+          _ (exec-op actor "t61c" {:op :deal/advance-stage :subject "deal-1" :to-stage :ic-review} operator)
+          _ (exec-op actor "t61e" {:op :term-sheet/propose :subject "deal-1" :proposed-by :fund
+                                   :terms {:valuation 8000000 :security-type :safe}} operator)
+          _ (exec-op actor "t61f" {:op :term-sheet/sign :subject "deal-1" :signed-by :fund} operator)
+          _ (exec-op actor "t61g" {:op :term-sheet/sign :subject "deal-1" :signed-by :founder} operator)
+          _ (exec-op actor "t61d" {:op :investment/commit :subject "deal-1"} operator)
+          _ (approve! actor "t61d")
+          res (exec-op actor "t61" {:op :governance/board-seat :subject "deal-1"
+                                    :seat-holder "party-1" :seat-type :board-member
+                                    :event :granted :effective-date "2026-07-06"} operator)]
+      (is (= :commit (get-in res [:state :disposition])))
+      (is (not= :interrupted (:status res)))
+      (is (= 1 (count (store/board-seat-history-of db "deal-1")))))))
+
 (deftest capital-call-overcall-is-held-and-unoverridable
   (testing "a call far exceeding total fund commitments -> HOLD, never reaches a human"
     (let [[db actor] (fresh)
