@@ -7,7 +7,7 @@
  :itonami.blueprint/social-impact [:financial-inclusion :data-sovereignty :transparency]
  :itonami.blueprint/governor :investment-committee-governor
  :itonami.blueprint/required-technologies [:robotics :identity :forms :dmn :bpmn :audit-ledger :securities]
- :itonami.blueprint/optional-technologies []
+ :itonami.blueprint/optional-technologies [:corporate-intelligence]
  :itonami.blueprint/status :public-oss
  :itonami.blueprint/robotics true
  :itonami.blueprint/maturity :implemented
