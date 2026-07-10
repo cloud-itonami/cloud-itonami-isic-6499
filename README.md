@@ -241,8 +241,9 @@ the same "self-contained sibling" relationship `cloud-itonami-isic-6511`'s
 | `src/vcfund/governor.cljc` | **InvestmentCommitteeGovernor** -- 15 HARD checks + 1 soft: spec-basis · sanctions hold · DD-complete · stage-insufficient · stage-transition · term-sheet-missing · term-sheet-not-executed · term-sheet-after-commitment · accredited-investor · capital-call overcall · portfolio-report-requires-commitment · follow-on-requires-prior-commitment · commitment-missing · clawback-exceeds-entitlement · board-seat-requires-commitment · confidence/quadruple-actuation gate |
 | `src/vcfund/phase.cljc` | **Phase 0→3** -- read-only → assisted intake → assisted DD/screen → supervised (call/commit/follow-on/distribute/clawback-repay always human; stage-advance/term-sheet-propose/term-sheet-sign/portfolio-report/board-seat auto-eligible, no capital risk) |
 | `src/vcfund/operation.cljc` | **OperationActor** -- langgraph-clj StateGraph |
+| `src/vcfund/corporate_intel.cljc` | optional cross-reference into [`cloud-itonami-isic-8291`](https://github.com/cloud-itonami/cloud-itonami-isic-8291)'s `:disclosure/screen-name` (ADR-2607110400 §5) -- catches a party clean on every LOCAL field but flagged in 8291's own sourced PEP/sanctions data; wired into `screen-kyc` via an injected fn, default is a no-op so every prior caller's behavior is unchanged unless explicitly opted in |
 | `src/vcfund/sim.cljc` | demo driver |
-| `test/vcfund/*_test.clj` | governor contract · phase invariants · store parity · registry conformance · pipeline/captable/nav/waterfall unit tests · facts coverage |
+| `test/vcfund/*_test.clj` | governor contract · phase invariants · store parity · registry conformance · pipeline/captable/nav/waterfall unit tests · facts coverage · corporate-intelligence integration |
 
 ## Business-process coverage (honest)
 

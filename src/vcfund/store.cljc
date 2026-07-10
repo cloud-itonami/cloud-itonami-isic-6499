@@ -85,7 +85,15 @@
    :parties
    {"party-1" {:id "party-1" :name "Jane Founder" :role :founder :sanctions-hit? false :id-doc "passport-us-****1234"}
     "party-2" {:id "party-2" :name "John Cofounder" :role :founder :sanctions-hit? false :id-doc "passport-us-****5678"}
-    "party-3" {:id "party-3" :name "Sanctioned Founder" :role :founder :sanctions-hit? true :id-doc nil}}})
+    "party-3" {:id "party-3" :name "Sanctioned Founder" :role :founder :sanctions-hit? true :id-doc nil}
+    ;; not on any deal (a spare party) -- deliberately clean on EVERY local
+    ;; field (no :sanctions-hit?, has an id-doc) -- this name is shared with
+    ;; cloud-itonami-isic-8291's own demo data (a sanctions-flagged
+    ;; official), so it exists purely to prove vcfund.corporate-intel's
+    ;; cross-reference catches a hit this repo's local-only checks would
+    ;; otherwise miss entirely.
+    "party-4" {:id "party-4" :name "Jane Smith (demo)" :role :founder :sanctions-hit? false
+               :id-doc "passport-uk-****5678"}}})
 
 ;; ----------------------------- shared commit/distribute logic -----------------------------
 
