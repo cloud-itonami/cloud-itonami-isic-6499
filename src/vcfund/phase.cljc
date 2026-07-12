@@ -37,7 +37,16 @@
   `:portfolio/report` and `:governance/board-seat` move no capital
   (governed by HARD checks in `vcfund.governor`, but never `high-stakes`),
   so they ARE auto-eligible at phase 3 -- a deliberately lighter touch
-  matching their actual risk.")
+  matching their actual risk.
+
+  The decision core is delegated to the safety kernel
+  `vcfund.kernels.gate` (integer-coded, fail-closed, safe-kotoba
+  subset); this namespace keeps the human-readable phase table (the
+  documentation and structural-invariant tests read it) and does the
+  keyword<->wire-code mapping at the boundary. The kernel's own battery
+  and the parity matrix in `vcfund.kernels.gate-test` pin the two
+  representations together."
+  (:require [vcfund.kernels.gate :as kernel]))
 
 (def read-ops  #{:coverage/report})
 (def write-ops #{:lp/intake :kyc/screen :dd/assess :deal/advance-stage :term-sheet/propose
@@ -62,6 +71,39 @@
 
 (def default-phase 3)
 
+;; ---- kernel wire-code bridges (façade-side, not kernel vocabulary) ----
+
+(defn- op->code
+  "Kernel op wire code. Unknown ops map to 14 (unknown write) — the
+  kernel never write-enables it, so an unrecognized op fails closed to
+  HOLD exactly as the old set-membership logic did."
+  [op]
+  (cond
+    (contains? read-ops op)          0
+    (= op :lp/intake)                1
+    (= op :dd/assess)                2
+    (= op :kyc/screen)               3
+    (= op :deal/advance-stage)       4
+    (= op :term-sheet/propose)       5
+    (= op :term-sheet/sign)          6
+    (= op :capital-call/issue)       7
+    (= op :investment/commit)        8
+    (= op :investment/follow-on)     9
+    (= op :portfolio/report)         10
+    (= op :exit/distribute)          11
+    (= op :waterfall/clawback-repay) 12
+    (= op :governance/board-seat)    13
+    :else                            14))
+
+(defn- disposition->code [d]
+  (cond (= d :commit) 0 (= d :escalate) 1 (= d :hold) 2 :else 2))
+
+(defn- code->disposition [c]
+  (if (= c 0) :commit (if (= c 1) :escalate :hold)))
+
+(defn- code->reason [c]
+  (if (= c 1) :phase-disabled (if (= c 2) :phase-approval nil)))
+
 (defn gate
   "Adjust a governor disposition for the rollout phase. Returns
   {:disposition kw :reason kw|nil}.
@@ -76,14 +118,13 @@
     at any phase, so they always escalate once the governor clears them
     (or hold if the governor doesn't)."
   [phase {:keys [op]} governor-disposition]
-  (let [{:keys [writes auto]} (get phases phase (get phases default-phase))]
-    (cond
-      (= :hold governor-disposition)       {:disposition :hold :reason nil}
-      (contains? read-ops op)              {:disposition governor-disposition :reason nil}
-      (not (contains? writes op))          {:disposition :hold :reason :phase-disabled}
-      (and (= :commit governor-disposition)
-           (not (contains? auto op)))      {:disposition :escalate :reason :phase-approval}
-      :else                                {:disposition governor-disposition :reason nil})))
+  (let [p (if (contains? phases phase) phase default-phase)
+        op-code (op->code op)
+        gov-code (disposition->code governor-disposition)
+        d (kernel/phase-disposition p op-code gov-code)
+        r (kernel/phase-reason p op-code gov-code)]
+    {:disposition (code->disposition d)
+     :reason (code->reason r)}))
 
 (defn verdict->disposition
   "Map an InvestmentCommitteeGovernor verdict to a base disposition before

@@ -48,13 +48,13 @@
       (is (close? 0.0 (:gp-clawback r))))))
 
 (deftest whole-fund-waterfall-validation-rules
-  (is (thrown? Exception (waterfall/whole-fund-waterfall
+  (is (thrown? #?(:clj Exception :cljs js/Error) (waterfall/whole-fund-waterfall
                           {:total-contributed-capital -1 :total-exit-proceeds 0 :fund-life-years 1
                            :preferred-return-rate 0.08 :carry-rate 0.2 :total-gp-carry-already-paid 0})))
-  (is (thrown? Exception (waterfall/whole-fund-waterfall
+  (is (thrown? #?(:clj Exception :cljs js/Error) (waterfall/whole-fund-waterfall
                           {:total-contributed-capital 0 :total-exit-proceeds 0 :fund-life-years 1
                            :preferred-return-rate -0.01 :carry-rate 0.2 :total-gp-carry-already-paid 0})))
-  (is (thrown? Exception (waterfall/whole-fund-waterfall
+  (is (thrown? #?(:clj Exception :cljs js/Error) (waterfall/whole-fund-waterfall
                           {:total-contributed-capital 0 :total-exit-proceeds 0 :fund-life-years 1
                            :preferred-return-rate 0.08 :carry-rate 1.5 :total-gp-carry-already-paid 0}))))
 

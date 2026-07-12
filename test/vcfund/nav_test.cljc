@@ -17,7 +17,7 @@
     (is (close? 3333333.333333333 (:unfunded (first (filter #(= "lp-1" (:lp-id %)) (:by-lp r))))))))
 
 (deftest unfunded-commitments-validation-rules
-  (is (thrown? Exception (nav/unfunded-commitments []))))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (nav/unfunded-commitments []))))
 
 ;; ----------------------------- multi-currency FX -----------------------------
 
@@ -28,11 +28,11 @@
   (is (close? 5.0 (nav/convert-currency {:amount 500 :from-currency "JPY" :to-currency "USD" :rate 0.01}))))
 
 (deftest convert-currency-validation-rules
-  (is (thrown? Exception (nav/convert-currency {:amount -1 :from-currency "USD" :to-currency "USD"})))
-  (is (thrown? Exception (nav/convert-currency {:amount 1 :from-currency "" :to-currency "USD"})))
-  (is (thrown? Exception (nav/convert-currency {:amount 1 :from-currency "USD" :to-currency ""})))
-  (is (thrown? Exception (nav/convert-currency {:amount 1 :from-currency "JPY" :to-currency "USD" :rate nil})))
-  (is (thrown? Exception (nav/convert-currency {:amount 1 :from-currency "JPY" :to-currency "USD" :rate -1}))))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (nav/convert-currency {:amount -1 :from-currency "USD" :to-currency "USD"})))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (nav/convert-currency {:amount 1 :from-currency "" :to-currency "USD"})))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (nav/convert-currency {:amount 1 :from-currency "USD" :to-currency ""})))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (nav/convert-currency {:amount 1 :from-currency "JPY" :to-currency "USD" :rate nil})))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (nav/convert-currency {:amount 1 :from-currency "JPY" :to-currency "USD" :rate -1}))))
 
 (def multi-currency-lps-fixture
   [{:id "lp-1" :commitment-amount 2000000 :called-amount 0 :currency "USD"}
@@ -50,7 +50,7 @@
     (is (close? 1000000.0 (:commitment-amount (second (:by-lp r)))) "100,000,000 JPY @ 0.01 -> 1,000,000 USD")))
 
 (deftest unfunded-commitments-throws-on-missing-fx-rate
-  (is (thrown? Exception (nav/unfunded-commitments multi-currency-lps-fixture {:base-currency "USD"}))))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (nav/unfunded-commitments multi-currency-lps-fixture {:base-currency "USD"}))))
 
 (deftest fund-nav-values-a-held-investment-at-cost-when-unmarked
   (let [r (nav/fund-nav {:total-called 2000000 :total-invested-at-cost 2000000
@@ -79,7 +79,7 @@
       (is (close? 1904000.0 (:nav r))))))
 
 (deftest fund-nav-validation-rules
-  (is (thrown? Exception (nav/fund-nav {:total-called -1 :total-invested-at-cost 0
+  (is (thrown? #?(:clj Exception :cljs js/Error) (nav/fund-nav {:total-called -1 :total-invested-at-cost 0
                                         :total-exit-proceeds-received 0 :total-distributed-to-lps 0
                                         :investments []}))))
 
@@ -90,9 +90,9 @@
                         {:fee-basis 6000000 :annual-fee-rate 0.02 :years-elapsed 2}))))
 
 (deftest management-fee-accrued-validation-rules
-  (is (thrown? Exception (nav/management-fee-accrued {:fee-basis -1 :annual-fee-rate 0.02 :years-elapsed 1})))
-  (is (thrown? Exception (nav/management-fee-accrued {:fee-basis 1 :annual-fee-rate -0.02 :years-elapsed 1})))
-  (is (thrown? Exception (nav/management-fee-accrued {:fee-basis 1 :annual-fee-rate 0.02 :years-elapsed -1}))))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (nav/management-fee-accrued {:fee-basis -1 :annual-fee-rate 0.02 :years-elapsed 1})))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (nav/management-fee-accrued {:fee-basis 1 :annual-fee-rate -0.02 :years-elapsed 1})))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (nav/management-fee-accrued {:fee-basis 1 :annual-fee-rate 0.02 :years-elapsed -1}))))
 
 (deftest management-fee-accrued-step-down-after-investment-period
   (testing "annual-fee-rate for the first investment-period-years, then post-investment-period-rate afterward"
@@ -109,10 +109,10 @@
                   :investment-period-years 5 :post-investment-period-rate 0.015})))))
 
 (deftest management-fee-accrued-step-down-validation-rules
-  (is (thrown? Exception (nav/management-fee-accrued
+  (is (thrown? #?(:clj Exception :cljs js/Error) (nav/management-fee-accrued
                           {:fee-basis 1 :annual-fee-rate 0.02 :years-elapsed 1
                            :investment-period-years -1 :post-investment-period-rate 0.01})))
-  (is (thrown? Exception (nav/management-fee-accrued
+  (is (thrown? #?(:clj Exception :cljs js/Error) (nav/management-fee-accrued
                           {:fee-basis 1 :annual-fee-rate 0.02 :years-elapsed 1
                            :investment-period-years 5 :post-investment-period-rate -0.01}))))
 
@@ -238,9 +238,9 @@
     (is (close? 5000000.0 (:commitment-amount r)) "original row fields are preserved")))
 
 (deftest lp-capital-account-validation-rules
-  (is (thrown? Exception (nav/lp-capital-account lp-row-fixture
+  (is (thrown? #?(:clj Exception :cljs js/Error) (nav/lp-capital-account lp-row-fixture
                                                  {:total-commitments 0 :total-distributed-to-lps 0 :fund-nav 0})))
-  (is (thrown? Exception (nav/lp-capital-account lp-row-fixture
+  (is (thrown? #?(:clj Exception :cljs js/Error) (nav/lp-capital-account lp-row-fixture
                                                  {:total-commitments 6000000 :total-distributed-to-lps -1 :fund-nav 0}))))
 
 (deftest lp-capital-account-report-reconciles-against-fund-nav-report
