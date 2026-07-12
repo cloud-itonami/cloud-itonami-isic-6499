@@ -30,14 +30,14 @@
     (is (close? 9600000.0 (:conversion-valuation discount-only)))))
 
 (deftest safe-conversion-validation-rules
-  (is (thrown? Exception (captable/safe-conversion {:investment-amount -1 :valuation-cap 1
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/safe-conversion {:investment-amount -1 :valuation-cap 1
                                                     :discount-rate nil :next-round-pre-money-valuation 1})))
-  (is (thrown? Exception (captable/safe-conversion {:investment-amount 1 :valuation-cap nil
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/safe-conversion {:investment-amount 1 :valuation-cap nil
                                                     :discount-rate nil :next-round-pre-money-valuation 1}))
       "at least one of cap/discount required")
-  (is (thrown? Exception (captable/safe-conversion {:investment-amount 1 :valuation-cap -1
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/safe-conversion {:investment-amount 1 :valuation-cap -1
                                                     :discount-rate nil :next-round-pre-money-valuation 1})))
-  (is (thrown? Exception (captable/safe-conversion {:investment-amount 1 :valuation-cap 1
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/safe-conversion {:investment-amount 1 :valuation-cap 1
                                                     :discount-rate 1.5 :next-round-pre-money-valuation 1}))))
 
 ;; ----------------------------- saft-conversion (crypto) -----------------------------
@@ -57,8 +57,8 @@
     (is (close? 0.8 (:dilution-factor r)))))
 
 (deftest priced-round-ownership-validation-rules
-  (is (thrown? Exception (captable/priced-round-ownership {:investment-amount -1 :pre-money-valuation 1})))
-  (is (thrown? Exception (captable/priced-round-ownership {:investment-amount 1 :pre-money-valuation -1}))))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/priced-round-ownership {:investment-amount -1 :pre-money-valuation 1})))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/priced-round-ownership {:investment-amount 1 :pre-money-valuation -1}))))
 
 ;; ----------------------------- option-pool-shuffle -----------------------------
 
@@ -70,8 +70,8 @@
         "the new pool really is 10% of the resulting pre-money share count")))
 
 (deftest option-pool-shuffle-validation-rules
-  (is (thrown? Exception (captable/option-pool-shuffle {:pre-round-shares -1 :target-pool-pct 0.1})))
-  (is (thrown? Exception (captable/option-pool-shuffle {:pre-round-shares 1 :target-pool-pct 1.1}))))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/option-pool-shuffle {:pre-round-shares -1 :target-pool-pct 0.1})))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/option-pool-shuffle {:pre-round-shares 1 :target-pool-pct 1.1}))))
 
 ;; ----------------------------- priced-round-shares -----------------------------
 
@@ -86,9 +86,9 @@
       (is (close? (/ 2000000.0 12000000.0) (:new-investor-ownership-pct r))))))
 
 (deftest priced-round-shares-validation-rules
-  (is (thrown? Exception (captable/priced-round-shares {:investment-amount -1 :pre-money-valuation 1 :pre-round-shares 1})))
-  (is (thrown? Exception (captable/priced-round-shares {:investment-amount 1 :pre-money-valuation -1 :pre-round-shares 1})))
-  (is (thrown? Exception (captable/priced-round-shares {:investment-amount 1 :pre-money-valuation 1 :pre-round-shares 0}))))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/priced-round-shares {:investment-amount -1 :pre-money-valuation 1 :pre-round-shares 1})))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/priced-round-shares {:investment-amount 1 :pre-money-valuation -1 :pre-round-shares 1})))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/priced-round-shares {:investment-amount 1 :pre-money-valuation 1 :pre-round-shares 0}))))
 
 ;; ----------------------------- cap-table-ownership -----------------------------
 
@@ -101,7 +101,7 @@
     (is (close? 0.2 (:ownership-pct (first (filter #(= "investor" (:holder %)) (:by-holder r))))))))
 
 (deftest cap-table-ownership-validation-rules
-  (is (thrown? Exception (captable/cap-table-ownership []))))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/cap-table-ownership []))))
 
 ;; ----------------------------- multi-safe-conversion-shares -----------------------------
 
@@ -123,9 +123,9 @@
       (is (close? 8980000.0 (:post-safe-conversion-shares r))))))
 
 (deftest multi-safe-conversion-shares-validation-rules
-  (is (thrown? Exception (captable/multi-safe-conversion-shares
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/multi-safe-conversion-shares
                           {:safes [] :next-round-pre-money-valuation 1 :pre-conversion-shares 1})))
-  (is (thrown? Exception (captable/multi-safe-conversion-shares
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/multi-safe-conversion-shares
                           {:safes [{:id "a" :investment-amount 1 :valuation-cap 1 :discount-rate nil}]
                            :next-round-pre-money-valuation 1 :pre-conversion-shares 0}))))
 
@@ -161,23 +161,23 @@
       (is (close? 10000000.0 (:post-safe-conversion-shares r))))))
 
 (deftest post-money-multi-safe-conversion-shares-validation-rules
-  (is (thrown? Exception (captable/post-money-multi-safe-conversion-shares
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/post-money-multi-safe-conversion-shares
                           {:safes [] :pre-conversion-shares 1000000})))
-  (is (thrown? Exception (captable/post-money-multi-safe-conversion-shares
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/post-money-multi-safe-conversion-shares
                           {:safes [{:id "a" :investment-amount 100 :valuation-cap 1000}]
                            :pre-conversion-shares 0})))
-  (is (thrown? Exception (captable/post-money-multi-safe-conversion-shares
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/post-money-multi-safe-conversion-shares
                           {:safes [{:id "a" :investment-amount -1 :valuation-cap 1000}]
                            :pre-conversion-shares 1000000}))
       "negative investment-amount")
-  (is (thrown? Exception (captable/post-money-multi-safe-conversion-shares
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/post-money-multi-safe-conversion-shares
                           {:safes [{:id "a" :investment-amount 100 :valuation-cap nil}]
                            :pre-conversion-shares 1000000}))
       "cap-only fn -- valuation-cap required"))
 
 (deftest post-money-multi-safe-conversion-shares-rejects-an-oversubscribed-round
   (testing "combined ownership caps reaching 100% of the company is not a solvable cap table"
-    (is (thrown? Exception (captable/post-money-multi-safe-conversion-shares
+    (is (thrown? #?(:clj Exception :cljs js/Error) (captable/post-money-multi-safe-conversion-shares
                             {:safes [{:id "a" :investment-amount 6000000 :valuation-cap 10000000}
                                      {:id "b" :investment-amount 5000000 :valuation-cap 10000000}]
                              :pre-conversion-shares 1000000})))))
@@ -206,10 +206,10 @@
     (is (close? 1.0 (:vested-pct r)))))
 
 (deftest vesting-schedule-validation-rules
-  (is (thrown? Exception (captable/vesting-schedule {:total-shares -1 :vesting-months 48 :cliff-months 12 :months-elapsed 1})))
-  (is (thrown? Exception (captable/vesting-schedule {:total-shares 1 :vesting-months 0 :cliff-months 0 :months-elapsed 1})))
-  (is (thrown? Exception (captable/vesting-schedule {:total-shares 1 :vesting-months 48 :cliff-months 60 :months-elapsed 1})))
-  (is (thrown? Exception (captable/vesting-schedule {:total-shares 1 :vesting-months 48 :cliff-months 12 :months-elapsed -1}))))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/vesting-schedule {:total-shares -1 :vesting-months 48 :cliff-months 12 :months-elapsed 1})))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/vesting-schedule {:total-shares 1 :vesting-months 0 :cliff-months 0 :months-elapsed 1})))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/vesting-schedule {:total-shares 1 :vesting-months 48 :cliff-months 60 :months-elapsed 1})))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/vesting-schedule {:total-shares 1 :vesting-months 48 :cliff-months 12 :months-elapsed -1}))))
 
 ;; ----------------------------- accelerated-vesting -----------------------------
 
@@ -244,9 +244,9 @@
     (is (false? (:accelerated? term-only)) "termination alone (no change-of-control) does not fire it either")))
 
 (deftest accelerated-vesting-validation-rules
-  (is (thrown? Exception (captable/accelerated-vesting {:total-shares 1 :vesting-months 48 :cliff-months 12
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/accelerated-vesting {:total-shares 1 :vesting-months 48 :cliff-months 12
                                                         :months-elapsed 1 :trigger :triple})))
-  (is (thrown? Exception (captable/accelerated-vesting {:total-shares -1 :vesting-months 48 :cliff-months 12
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/accelerated-vesting {:total-shares -1 :vesting-months 48 :cliff-months 12
                                                         :months-elapsed 1 :trigger :single :change-of-control? true}))
       "still reuses vesting-schedule's own validation"))
 
@@ -263,9 +263,9 @@
     (is (close? 0.0 (:intrinsic-value r)) "underwater -- nobody exercises for a loss")))
 
 (deftest option-exercise-economics-validation-rules
-  (is (thrown? Exception (captable/option-exercise-economics {:shares -1 :strike-price 1 :fmv-per-share 1})))
-  (is (thrown? Exception (captable/option-exercise-economics {:shares 1 :strike-price -1 :fmv-per-share 1})))
-  (is (thrown? Exception (captable/option-exercise-economics {:shares 1 :strike-price 1 :fmv-per-share -1}))))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/option-exercise-economics {:shares -1 :strike-price 1 :fmv-per-share 1})))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/option-exercise-economics {:shares 1 :strike-price -1 :fmv-per-share 1})))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/option-exercise-economics {:shares 1 :strike-price 1 :fmv-per-share -1}))))
 
 ;; ----------------------------- option-exercise-tax-treatment -----------------------------
 
@@ -295,15 +295,15 @@
     (is (close? 0.0 (:amt-preference-item iso)))))
 
 (deftest option-exercise-tax-treatment-validation-rules
-  (is (thrown? Exception (captable/option-exercise-tax-treatment
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/option-exercise-tax-treatment
                           {:shares 1 :strike-price 1 :fmv-per-share 1 :option-type :rsu})))
-  (is (thrown? Exception (captable/option-exercise-tax-treatment
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/option-exercise-tax-treatment
                           {:shares 1 :strike-price 1 :fmv-per-share 1 :option-type :nso}))
       "ordinary-income-tax-rate required for :nso")
-  (is (thrown? Exception (captable/option-exercise-tax-treatment
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/option-exercise-tax-treatment
                           {:shares 1 :strike-price 1 :fmv-per-share 1 :option-type :nso
                            :ordinary-income-tax-rate 1.5}))
       "ordinary-income-tax-rate must be in [0,1]")
-  (is (thrown? Exception (captable/option-exercise-tax-treatment
+  (is (thrown? #?(:clj Exception :cljs js/Error) (captable/option-exercise-tax-treatment
                           {:shares -1 :strike-price 1 :fmv-per-share 1 :option-type :iso}))
       "still reuses option-exercise-economics's own validation"))

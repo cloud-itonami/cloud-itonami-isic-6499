@@ -28,7 +28,7 @@
                   ["Acme" :safe -1 "USA"]
                   ["Acme" :safe 0 ""]]]
     (doseq [[company security-type amount jurisdiction] bad-args]
-      (is (thrown? Exception
+      (is (thrown? #?(:clj Exception :cljs js/Error)
                    (r/register-commitment company security-type amount jurisdiction 1))))))
 
 (deftest commitment-accepts-saft-for-crypto-native-funds
@@ -52,10 +52,10 @@
     (is (= (get-in result ["record" "terms"]) {:valuation 9000000}))))
 
 (deftest term-sheet-validation-rules
-  (is (thrown? Exception (r/register-term-sheet "" :fund {} 0)))
-  (is (thrown? Exception (r/register-term-sheet "deal-1" :investor {} 0)) "proposed-by must be :fund or :founder")
-  (is (thrown? Exception (r/register-term-sheet "deal-1" :fund "not-a-map" 0)))
-  (is (thrown? Exception (r/register-term-sheet "deal-1" :fund {} -1))))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/register-term-sheet "" :fund {} 0)))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/register-term-sheet "deal-1" :investor {} 0)) "proposed-by must be :fund or :founder")
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/register-term-sheet "deal-1" :fund "not-a-map" 0)))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/register-term-sheet "deal-1" :fund {} -1))))
 
 (deftest term-sheet-history-is-append-only
   (let [v0 (r/register-term-sheet "deal-1" :fund {:valuation 6000000} 0)
@@ -75,8 +75,8 @@
     (is (not (contains? (:changed d) :board-seat)) "unchanged key omitted entirely")))
 
 (deftest term-sheet-diff-validation-rules
-  (is (thrown? Exception (r/term-sheet-diff "not-a-map" {})))
-  (is (thrown? Exception (r/term-sheet-diff {} "not-a-map"))))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/term-sheet-diff "not-a-map" {})))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/term-sheet-diff {} "not-a-map"))))
 
 (deftest term-sheet-signature-is-a-draft-with-no-certificate
   (let [result (r/register-term-sheet-signature "deal-1" 0 :fund)]
@@ -87,9 +87,9 @@
     (is (= (get-in result ["record" "signed_by"]) "fund"))))
 
 (deftest term-sheet-signature-validation-rules
-  (is (thrown? Exception (r/register-term-sheet-signature "" 0 :fund)))
-  (is (thrown? Exception (r/register-term-sheet-signature "deal-1" -1 :fund)))
-  (is (thrown? Exception (r/register-term-sheet-signature "deal-1" 0 :investor))))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/register-term-sheet-signature "" 0 :fund)))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/register-term-sheet-signature "deal-1" -1 :fund)))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/register-term-sheet-signature "deal-1" 0 :investor))))
 
 (deftest fully-executed-requires-both-signers-on-the-same-version
   (let [fund-v0 (get (r/register-term-sheet-signature "deal-1" 0 :fund) "record")
@@ -130,9 +130,9 @@
       (is (not (:overcall? (get by-id "lp-2")))))))
 
 (deftest capital-call-allocations-validation-rules
-  (is (thrown? Exception (r/capital-call-allocations lps-fixture -1)))
-  (is (thrown? Exception (r/capital-call-allocations [] 1000)))
-  (is (thrown? Exception (r/capital-call-allocations [{:id "lp-1" :commitment-amount 0}] 1000))))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/capital-call-allocations lps-fixture -1)))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/capital-call-allocations [] 1000)))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/capital-call-allocations [{:id "lp-1" :commitment-amount 0}] 1000))))
 
 (deftest capital-call-certificate-is-a-draft-not-a-real-call
   (let [allocs (r/capital-call-allocations lps-fixture 2000000)
@@ -151,11 +151,11 @@
 
 (deftest capital-call-validation-rules
   (let [allocs (r/capital-call-allocations lps-fixture 2000000)]
-    (is (thrown? Exception (r/register-capital-call [] 2000000 "USA" 0 "2026-07-06")))
-    (is (thrown? Exception (r/register-capital-call allocs -1 "USA" 0 "2026-07-06")))
-    (is (thrown? Exception (r/register-capital-call allocs 2000000 "" 0 "2026-07-06")))
-    (is (thrown? Exception (r/register-capital-call allocs 2000000 "USA" -1 "2026-07-06")))
-    (is (thrown? Exception (r/register-capital-call allocs 2000000 "USA" 0 nil)))))
+    (is (thrown? #?(:clj Exception :cljs js/Error) (r/register-capital-call [] 2000000 "USA" 0 "2026-07-06")))
+    (is (thrown? #?(:clj Exception :cljs js/Error) (r/register-capital-call allocs -1 "USA" 0 "2026-07-06")))
+    (is (thrown? #?(:clj Exception :cljs js/Error) (r/register-capital-call allocs 2000000 "" 0 "2026-07-06")))
+    (is (thrown? #?(:clj Exception :cljs js/Error) (r/register-capital-call allocs 2000000 "USA" -1 "2026-07-06")))
+    (is (thrown? #?(:clj Exception :cljs js/Error) (r/register-capital-call allocs 2000000 "USA" 0 nil)))))
 
 (deftest capital-call-history-is-append-only
   (let [c1 (r/register-capital-call (r/capital-call-allocations lps-fixture 1000000) 1000000 "USA" 0 "2026-07-06")
@@ -205,13 +205,13 @@
                                           :carry-rate 0.20})))))
 
 (deftest waterfall-validation-rules
-  (is (thrown? Exception (r/distribute-waterfall {:contributed-capital -1 :exit-proceeds 0
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/distribute-waterfall {:contributed-capital -1 :exit-proceeds 0
                                                   :preferred-return-rate 0.08 :holding-period-years 1
                                                   :carry-rate 0.20})))
-  (is (thrown? Exception (r/distribute-waterfall {:contributed-capital 0 :exit-proceeds -1
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/distribute-waterfall {:contributed-capital 0 :exit-proceeds -1
                                                   :preferred-return-rate 0.08 :holding-period-years 1
                                                   :carry-rate 0.20})))
-  (is (thrown? Exception (r/distribute-waterfall {:contributed-capital 0 :exit-proceeds 0
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/distribute-waterfall {:contributed-capital 0 :exit-proceeds 0
                                                   :preferred-return-rate 0.08 :holding-period-years 1
                                                   :carry-rate 1.5}))))
 
@@ -233,12 +233,12 @@
     (is (= (get-in result ["record" "event"]) "revoked"))))
 
 (deftest board-seat-event-validation-rules
-  (is (thrown? Exception (r/register-board-seat-event "" "party-1" :board-member :granted "2026-07-06" 0)))
-  (is (thrown? Exception (r/register-board-seat-event "deal-1" "" :board-member :granted "2026-07-06" 0)))
-  (is (thrown? Exception (r/register-board-seat-event "deal-1" "party-1" :not-a-real-seat-type :granted "2026-07-06" 0)))
-  (is (thrown? Exception (r/register-board-seat-event "deal-1" "party-1" :board-member :not-a-real-event "2026-07-06" 0)))
-  (is (thrown? Exception (r/register-board-seat-event "deal-1" "party-1" :board-member :granted "" 0)))
-  (is (thrown? Exception (r/register-board-seat-event "deal-1" "party-1" :board-member :granted "2026-07-06" -1))))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/register-board-seat-event "" "party-1" :board-member :granted "2026-07-06" 0)))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/register-board-seat-event "deal-1" "" :board-member :granted "2026-07-06" 0)))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/register-board-seat-event "deal-1" "party-1" :not-a-real-seat-type :granted "2026-07-06" 0)))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/register-board-seat-event "deal-1" "party-1" :board-member :not-a-real-event "2026-07-06" 0)))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/register-board-seat-event "deal-1" "party-1" :board-member :granted "" 0)))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/register-board-seat-event "deal-1" "party-1" :board-member :granted "2026-07-06" -1))))
 
 (deftest current-board-seats-projects-the-latest-event-per-holder
   (let [history [(get (r/register-board-seat-event "deal-1" "party-1" :board-member :granted "2026-01-01" 0) "record")
@@ -272,12 +272,12 @@
     (is (= (get-in result ["record" "security_type"]) "saft"))))
 
 (deftest follow-on-validation-rules
-  (is (thrown? Exception (r/register-follow-on-commitment "" "USA-00000007" :safe 500000 "USA" 0)))
-  (is (thrown? Exception (r/register-follow-on-commitment "Acme" "" :safe 500000 "USA" 0)))
-  (is (thrown? Exception (r/register-follow-on-commitment "Acme" "USA-00000007" :not-a-real-security-type 500000 "USA" 0)))
-  (is (thrown? Exception (r/register-follow-on-commitment "Acme" "USA-00000007" :safe -1 "USA" 0)))
-  (is (thrown? Exception (r/register-follow-on-commitment "Acme" "USA-00000007" :safe 500000 "" 0)))
-  (is (thrown? Exception (r/register-follow-on-commitment "Acme" "USA-00000007" :safe 500000 "USA" -1))))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/register-follow-on-commitment "" "USA-00000007" :safe 500000 "USA" 0)))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/register-follow-on-commitment "Acme" "" :safe 500000 "USA" 0)))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/register-follow-on-commitment "Acme" "USA-00000007" :not-a-real-security-type 500000 "USA" 0)))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/register-follow-on-commitment "Acme" "USA-00000007" :safe -1 "USA" 0)))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/register-follow-on-commitment "Acme" "USA-00000007" :safe 500000 "" 0)))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/register-follow-on-commitment "Acme" "USA-00000007" :safe 500000 "USA" -1))))
 
 ;; ----------------------------- GP clawback repayment -----------------------------
 
@@ -296,10 +296,10 @@
     (is (= (get-in result ["record" "immutable"]) true))))
 
 (deftest clawback-repayment-validation-rules
-  (is (thrown? Exception (r/register-clawback-repayment -1 0 "2026-07-06")))
-  (is (thrown? Exception (r/register-clawback-repayment 1000 -1 "2026-07-06")))
-  (is (thrown? Exception (r/register-clawback-repayment 1000 0 nil)))
-  (is (thrown? Exception (r/register-clawback-repayment 1000 0 ""))))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/register-clawback-repayment -1 0 "2026-07-06")))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/register-clawback-repayment 1000 -1 "2026-07-06")))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/register-clawback-repayment 1000 0 nil)))
+  (is (thrown? #?(:clj Exception :cljs js/Error) (r/register-clawback-repayment 1000 0 ""))))
 
 (deftest distribution-is-append-only
   (let [c (r/register-commitment "Acme" :safe 1000000 "USA" 1)

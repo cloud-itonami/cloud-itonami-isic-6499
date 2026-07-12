@@ -108,12 +108,18 @@
                              `:exit/distribute` or `:waterfall/clawback-
                              repay` -> escalate."
   (:require [vcfund.facts :as facts]
+            [vcfund.kernels.gate :as gate]
             [vcfund.pipeline :as pipeline]
             [vcfund.registry :as registry]
             [vcfund.store :as store]
             [vcfund.waterfall :as waterfall]))
 
-(def confidence-floor 0.6)
+(def confidence-floor
+  "Documented threshold. The DECIDING copy is
+  `vcfund.kernels.gate/confidence-floor-x100` (integer x100 in the
+  safety kernel); this def is kept for callers/docs and pinned equal by
+  `vcfund.kernels.gate-test`."
+  0.6)
 
 (def high-stakes
   "Stakes grave enough to always require a human, even when clean.
@@ -129,6 +135,20 @@
   where capital flows FROM the GP INTO the fund, the mirror image of every
   other actuation here."
   #{:actuation/call :actuation/deploy :actuation/distribute :actuation/clawback})
+
+(defn- confidence->x100
+  "Host bridge (façade-side, not kernel vocabulary): scale a 0.0..1.0
+  advisor confidence to the kernel's integer x100 wire code."
+  [c]
+  (Math/round (* 100.0 (double c))))
+
+(defn- amount->micro
+  "Host bridge (façade-side, not kernel vocabulary): scale a capital
+  amount (fund base currency) to the kernel's integer micro-unit
+  (x1,000,000) wire code for the clawback threshold comparison.
+  Micro-unit rounding replaces the old inline 1e-6 float epsilon."
+  [x]
+  (Math/round (* 1000000.0 (double x))))
 
 ;; ----------------------------- checks -----------------------------
 
@@ -317,11 +337,16 @@
   reconciliation INDEPENDENTLY from live store data
   (`vcfund.waterfall/whole-fund-waterfall-report`) -- never trust the
   proposal's self-reported repayment amount. The requested repayment must
-  not exceed the actually-computed `:gp-clawback` the GP owes the fund."
+  not exceed the actually-computed `:gp-clawback` the GP owes the fund.
+  The comparison itself is decided by the safety kernel
+  (`vcfund.kernels.gate/clawback-exceeds`, strict scaled-integer
+  comparison at micro-unit granularity); this façade recomputes the
+  entitlement and scales both sides to the kernel's wire code."
   [{:keys [op amount fund-life-years]} st]
   (when (= op :waterfall/clawback-repay)
     (let [{:keys [gp-clawback]} (waterfall/whole-fund-waterfall-report st fund-life-years)]
-      (when (> (double amount) (+ gp-clawback 1e-6))
+      (when (= 1 (gate/clawback-exceeds (amount->micro amount)
+                                        (amount->micro gp-clawback)))
         [{:rule :clawback-exceeds-entitlement
           :detail (str "要求返金額" amount "が算定whole-fund clawback額" gp-clawback "を超過")}]))))
 
@@ -336,31 +361,46 @@
                     A human decides.
    - :ok?         -- clean AND not escalating: safe to auto-commit."
   [request _context proposal st]
-  (let [hard (into []
-                   (concat (spec-basis-violations request proposal)
-                           (sanctions-violations request proposal st)
-                           (dd-incomplete-violations request st)
-                           (stage-insufficient-violations request st)
-                           (stage-transition-violations request st)
-                           (term-sheet-missing-violations request st)
-                           (term-sheet-not-executed-violations request st)
-                           (term-sheet-after-commitment-violations request st)
-                           (accredited-investor-violations request st)
-                           (overcall-violations request st)
-                           (portfolio-report-requires-commitment-violations request st)
-                           (follow-on-requires-prior-commitment-violations request st)
-                           (commitment-missing-violations request st)
-                           (clawback-exceeds-entitlement-violations request st)
-                           (board-seat-requires-commitment-violations request st)))
+  (let [spec-v (spec-basis-violations request proposal)
+        sanc-v (sanctions-violations request proposal st)
+        dd-v   (dd-incomplete-violations request st)
+        stag-v (stage-insufficient-violations request st)
+        tran-v (stage-transition-violations request st)
+        tsm-v  (term-sheet-missing-violations request st)
+        tse-v  (term-sheet-not-executed-violations request st)
+        tsa-v  (term-sheet-after-commitment-violations request st)
+        acc-v  (accredited-investor-violations request st)
+        over-v (overcall-violations request st)
+        rep-v  (portfolio-report-requires-commitment-violations request st)
+        fol-v  (follow-on-requires-prior-commitment-violations request st)
+        com-v  (commitment-missing-violations request st)
+        claw-v (clawback-exceeds-entitlement-violations request st)
+        seat-v (board-seat-requires-commitment-violations request st)
+        hard (into [] (concat spec-v sanc-v dd-v stag-v tran-v tsm-v tse-v
+                              tsa-v acc-v over-v rep-v fol-v com-v claw-v
+                              seat-v))
         conf (:confidence proposal 0.0)
-        low? (< conf confidence-floor)
         stakes? (boolean (high-stakes (:stake proposal)))
-        hard? (boolean (seq hard))]
-    {:ok?          (and (not hard?) (not low?) (not stakes?))
+        flag (fn [v] (if (seq v) 1 0))
+        ;; The decision itself is delegated to the safety kernel
+        ;; (vcfund.kernels.gate, integer-coded fail-closed core); this
+        ;; façade only gathers evidence (violation lists with
+        ;; human-readable details) and maps codes back to keywords.
+        ;; Kernel is stricter than the old inline logic on ONE case by
+        ;; design: an out-of-range confidence (< 0 or > 1.0) now
+        ;; escalates instead of counting as high confidence.
+        code (gate/verdict-code (flag spec-v) (flag sanc-v) (flag dd-v)
+                                (flag stag-v) (flag tran-v) (flag tsm-v)
+                                (flag tse-v) (flag tsa-v) (flag acc-v)
+                                (flag over-v) (flag rep-v) (flag fol-v)
+                                (flag com-v) (flag claw-v) (flag seat-v)
+                                (confidence->x100 conf)
+                                (if stakes? 1 0))]
+    {:ok?          (= 0 code)
      :violations   hard
      :confidence   conf
-     :hard?        hard?
-     :escalate?    (and (not hard?) (or low? stakes?))
+     :hard?        (= 2 code)
+     :escalate?    (= 1 code)
      :high-stakes? stakes?}))
 
 (defn hold-fact
