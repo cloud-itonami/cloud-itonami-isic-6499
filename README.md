@@ -244,6 +244,7 @@ the same "self-contained sibling" relationship `cloud-itonami-isic-6511`'s
 | `src/vcfund/corporate_intel.cljc` | optional cross-reference into [`cloud-itonami-isic-8291`](https://github.com/cloud-itonami/cloud-itonami-isic-8291)'s `:disclosure/screen-name` (ADR-2607110400 §5) -- catches a party clean on every LOCAL field but flagged in 8291's own sourced PEP/sanctions data; wired into `screen-kyc` via an injected fn, default is a no-op so every prior caller's behavior is unchanged unless explicitly opted in |
 | `src/vcfund/sim.cljc` | demo driver |
 | `test/vcfund/*_test.clj` | governor contract · phase invariants · store parity · registry conformance · pipeline/captable/nav/waterfall unit tests · facts coverage · corporate-intelligence integration |
+| `wasm/clawback_entitlement.kotoba` | PoC: a WASM-compiled (`kotoba-lang/kotoba` -> `kotoba-lang/kototama`'s `actor:host` ABI) port of `governor.cljc`'s `clawback-exceeds-entitlement-violations` pure comparison (backed by `vcfund.kernels.gate/clawback-exceeds`) -- see `wasm/README.md` for scope, the input/output ABI, and what's out of scope (Store, the waterfall recompute, the StateGraph) |
 
 ## Business-process coverage (honest)
 

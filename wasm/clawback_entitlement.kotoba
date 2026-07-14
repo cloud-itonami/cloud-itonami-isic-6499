@@ -1,0 +1,21 @@
+(ns cloud-itonami-clawback-entitlement)
+
+(defn clawback-within-entitlement? [amount-cents entitlement-cents]
+  (<= amount-cents entitlement-cents))
+
+;; ABI: `main` stays 0-arity (the compiler rejects a parameterized main --
+;; :main-arity, see kotoba-lang/kotoba's compile-wasm-expr) and reads its
+;; two real i32 inputs out of the exported linear memory instead, at fixed
+;; byte offsets a host writes into before calling main() (same convention
+;; as cloud-itonami-isic-6492's affordability.kotoba and
+;; cloud-itonami-isic-6512's claim_coverage.kotoba):
+;;   offset 0: amount-cents        (i32, requested GP-clawback repayment,
+;;                                  smallest currency unit / cents)
+;;   offset 4: entitlement-cents   (i32, independently recomputed
+;;                                  whole-fund gp-clawback entitlement,
+;;                                  cents)
+;; Returns 1 (repayment within entitlement -- not a violation) or 0
+;; (repayment exceeds entitlement -- a HARD :clawback-exceeds-entitlement
+;; violation per vcfund.governor/clawback-exceeds-entitlement-violations).
+(defn main []
+  (clawback-within-entitlement? (mem-i32-at 0 0) (mem-i32-at 0 4)))
