@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Other financial service activities, except insurance and pension funding, n.e.c. (venture capital fund) | cloud-itonami-isic-6499</title>
+  <meta name="description" content="Other financial service activities, except insurance and pension funding, n.e.c. (venture capital fund) — governed open occupation blueprint (ISIC 6499).">
+  <style>
+    :root { --bg:#f5f7fa; --card:#fff; --fg:#1b1f24; --muted:#57606a; --accent:#1e3a8a; --line:#d0d7de; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg:#0d1117; --card:#161b22; --fg:#e6edf3; --muted:#8d96a0; --accent:#58a6ff; --line:#30363d; }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: linear-gradient(135deg, var(--bg), #c3cfe2);
+           min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; color: var(--fg); }
+    .container { max-width: 800px; width: 100%; background: var(--card); border-radius: 12px;
+                 box-shadow: 0 10px 40px rgba(0,0,0,.1); padding: 48px 40px; border: 1px solid var(--line); }
+    h1 { font-size: 1.85rem; color: var(--accent); margin-bottom: 8px; }
+    .badge { display: inline-block; background: #e0e7ff; color: var(--accent); padding: 3px 10px;
+             border-radius: 4px; font-size: .85rem; font-weight: 600; margin-bottom: 20px; }
+    @media (prefers-color-scheme: dark) { .badge { background: #1f2a44; } }
+    .pitch { border-left: 4px solid var(--accent); padding-left: 16px; margin: 20px 0 28px; color: var(--muted); line-height: 1.7; }
+    .pitch p { margin-bottom: 10px; }
+    .meta { font-size: .9rem; color: var(--muted); margin-bottom: 24px; }
+    .meta code { background: var(--bg); padding: 1px 6px; border-radius: 4px; }
+    .cta { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 28px; }
+    @media (max-width: 560px) { .cta { grid-template-columns: 1fr; } }
+    .cta a { display: block; text-align: center; text-decoration: none; padding: 14px 18px;
+             border-radius: 8px; font-weight: 600; }
+    .cta .primary { background: var(--accent); color: #fff; }
+    .cta .secondary { border: 1.5px solid var(--accent); color: var(--accent); }
+    ul.links { list-style: none; font-size: .95rem; }
+    ul.links li { margin: 8px 0; }
+    a { color: var(--accent); }
+    footer { margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--line);
+             font-size: .85rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <h1>Other financial service activities, except insurance and pension funding, n.e.c. (venture capital fund)</h1>
+    <div class="badge">ISIC 6499 · maturity implemented</div>
+    <div class="pitch">
+      <p>Open Business Blueprint for ISIC Rev.4/5 6499: Other financial service activities, except insurance and pension funding, n.e.c. -- specifically the class's own-account-investing member, a venture capital fund: deal pipeline/sourcing, LP subscription intake, deal due diligence, versioned term-sheet negotiation with e-signature execution, capital calls, Investment Committee capital deployment (initial and follow-on), portfolio-company KPI monitoring and whole-fund NAV, exit distribution back to LPs, and whole-fund GP-clawback reconciliation and repayment -- crypto-native capable (SAFT token deals, on-chain LP settlement) alongside traditional equity/SAFE/convertible-note investing.</p>
+      <p>UN ISIC Rev.4's own explanatory note for 6499 names this activity explicitly: *&quot;own-account investment activities, such as by venture capital companies, investment clubs etc.&quot;* (https://unstats.un.org/unsd/classifications/Econ/Detail/EN/27/6499). This repository was originally published as a generic :blueprint-tier n.e.c. scaffold (factoring / check-cashing / money-order framing) and has since been promoted to :implemented as this specific business, the one 6499's own citation names first -- see [docs/adr/0001-architecture.md](docs/adr/0001-architecture.md) and superproject ADR-2607061700 for the history (a short-lived standalone cloud-itonami-vc-fund repo was consolidated in here rather than kept separate, to stay on the ISIC-numbered naming convention).</p>
+      <p>Built on this workspace's [langgraph-clj](https://github.com/com-junkawasaki/langgraph-clj) StateGraph runtime (portable .cljc, supervised superstep loop, interrupts, Datomic/in-mem checkpoints) -- the same actor pattern as [cloud-itonami-isic-6511](https://github.com/cloud-itonami/cloud-itonami-isic-6511) (Underwriter-LLM ⊣ UnderwritingGovernor), cloud-itonami-M6910 (Registrar-LLM ⊣ RegistrarGovernor) and cloud-itonami-L6810 (Realtor-LLM ⊣ RealtorGovernor). Here it is DD-LLM ⊣ InvestmentCommitteeGovernor.</p>
+    </div>
+    <p class="meta">Domain <code>finance/venture-capital-fund</code> · Governor <code>investment-committee-governor</code> · License <code>AGPL-3.0-or-later</code></p>
+    <div class="cta">
+      <a class="primary" href="https://itonami.cloud/isco-1212/">Fork + self-host claim</a>
+      <a class="secondary" href="https://itonami.cloud/docs/go-live.md">Paid go-live path</a>
+    </div>
+    <ul class="links">
+      <li><a href="https://github.com/cloud-itonami/cloud-itonami-isic-6499">GitHub repository</a></li>
+      <li><a href="./operator-quickstart.md">Operator quickstart</a></li>
+      <li><a href="https://github.com/cloud-itonami/cloud-itonami-isic-6499/blob/main/blueprint.edn">blueprint.edn</a></li>
+      <li><a href="https://github.com/cloud-itonami/cloud-itonami-isic-6499/blob/main/README.md">README</a></li>
+    </ul>
+    <footer>
+      <p>Open occupation blueprint — no invented usage or revenue metrics. Product face generated for impl-product maturity (Lane C).</p>
+    </footer>
+  </main>
+</body>
+</html>
