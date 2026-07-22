@@ -7,6 +7,12 @@
  ;; with git coordinates.
  :deps {io.github.com-junkawasaki/langgraph-clj
         {:local/root "../../kotoba-lang/langgraph"}
+        ;; shared langchain.db store seam (EDN-blob codec) -- store.cljc's
+        ;; DatomicStore delegates its enc/dec* to this instead of
+        ;; hand-rolling the pr-str/edn.read-string two-liner ~190 sibling
+        ;; stores duplicated (ADR-2607141600).
+        io.github.kotoba-lang/langchain-store
+        {:local/root "../../kotoba-lang/langchain-store"}
         ;; optional: vcfund.corporate-intel's cross-reference into
         ;; cloud-itonami-isic-8291 (ADR-2607110400 §5). Only
         ;; vcfund.corporate-intel itself requires `dossier.*` --
