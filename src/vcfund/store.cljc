@@ -22,10 +22,9 @@
   always a query over an immutable log -- the audit trail an LP trusting a
   GP with their capital needs, and the evidence an operator needs if a
   call, commitment or distribution is later disputed."
-  (:require #?(:clj  [clojure.edn :as edn]
-               :cljs [cljs.reader :as edn])
-            [vcfund.registry :as registry]
-            [langchain.db :as d]))
+  (:require [vcfund.registry :as registry]
+            [langchain.db :as d]
+            [langchain-store.core :as ls]))
 
 (defprotocol Store
   (deal [s id])
@@ -348,8 +347,11 @@
    :clawback-repayment/seq {:db/unique :db.unique/identity}
    :board-seat/seq {:db/unique :db.unique/identity}})
 
-(defn- enc [v] (pr-str v))
-(defn- dec* [s] (when s (edn/read-string s)))
+;; EDN-blob codec -- delegates to kotoba-lang/langchain-store's shared
+;; implementation (ADR-2607141600) instead of hand-rolling the
+;; `pr-str`/`edn/read-string` two-liner ~190 sibling stores duplicated.
+(def ^:private enc ls/enc)
+(def ^:private dec* ls/dec*)
 
 (defn- portfolio-report-count
   "Global count of portfolio-report entities across ALL deals -- used as
