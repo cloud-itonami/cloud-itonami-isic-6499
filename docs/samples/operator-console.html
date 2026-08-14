@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>cloud-itonami-isic-6499 · venture-capital fund operations</title><style>*{box-sizing:border-box}
+body{margin:0;background:#f4f6f9;color:#16202c;
+font-family:-apple-system,'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;
+font-size:14px;line-height:1.6}
+header.bar{background:#0d1b2a;color:#fff;padding:20px 28px}
+header.bar h1{margin:0 0 6px;font-size:19px;font-weight:650}
+header.bar .badge{display:inline-block;background:#1b3550;border-radius:999px;
+padding:3px 12px;font-size:12px;color:#cfe0f2}
+main{padding:24px 28px 56px;max-width:1400px}
+section.card{background:#fff;border:1px solid #dde3ea;border-radius:10px;
+padding:20px 22px;margin-bottom:20px}
+section.card h2{margin:0 0 6px;font-size:16px;font-weight:650}
+p.lead{margin:0 0 14px;color:#4a5a6b;font-size:13px}
+p.muted,span.muted{color:#8794a3}
+p.callout-ok{margin:0 0 12px;padding:10px 14px;border-radius:8px;
+background:#e8f6ed;border-left:4px solid #1e7a45;color:#14532d}
+p.callout-bad{margin:0 0 12px;padding:10px 14px;border-radius:8px;
+background:#fdecec;border-left:4px solid #b3261e;color:#7a1a15}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th{text-align:left;background:#eef2f6;color:#42505f;font-weight:600;
+padding:7px 10px;border-bottom:1px solid #dde3ea;white-space:nowrap}
+td{padding:7px 10px;border-bottom:1px solid #eef1f5;vertical-align:top}
+tr:last-child td{border-bottom:none}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;
+background:#f1f4f8;border-radius:4px;padding:1px 5px}
+span.ok{color:#1e7a45;font-weight:600}
+span.warn{color:#8a5a00;font-weight:600}
+span.critical{display:inline-block;color:#b3261e;font-weight:600;
+background:#fdecec;border-radius:4px;padding:1px 6px;margin:1px 2px 1px 0}</style></head><body>
+<header class="bar">
+  <h1>Trusts, funds and similar financial entities (ISIC 6499) — Venture-Capital Fund Operator Console</h1>
+  <span class="badge">read-only build-time sample · governor-gated · all four directions of capital movement always human-approved</span>
+</header>
+<main>
+  <section class="card">
+    <h2>Limited partners (fund register)</h2>
+    <p class="lead">Read back out of vcfund.store AFTER the run. The called amounts are the pro-rata split vcfund.registry/capital-call-allocations computed for the $2,000,000 deal-1 call, applied by the store — not typed here.</p>
+    <table>
+      <thead><tr><th>LP</th><th>Name</th><th>Commitment</th><th>Called to date</th><th>Ccy</th><th>Jurisdiction</th><th>Accredited-investor affirmation</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td><code>lp-1</code></td><td>Sequoia Fund of Funds</td><td><code>5000000</code></td><td><code>1666666.6666666667</code></td><td>USD</td><td>USA</td><td><span class="ok">affirmed</span></td><td>:active</td></tr>
+        <tr><td><code>lp-2</code></td><td>個人LP 山田太郎</td><td><code>1000000</code></td><td><code>333333.3333333333</code></td><td>JPY</td><td>JPN</td><td><span class="critical">NOT affirmed</span></td><td>:active</td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Deal pipeline</h2>
+    <p class="lead">Seeded deals with their live pipeline status. deal-1 walked :sourced -&gt; :ic-review -&gt; :committed -&gt; :exited through real ops; deal-2 and deal-3 are still :sourced because every attempt to move them was refused.</p>
+    <table>
+      <thead><tr><th>Deal</th><th>Portfolio company</th><th>Jurisdiction</th><th>Ask</th><th>Ccy</th><th>Security</th><th>Status</th><th>Sector</th><th>Stage</th><th>Commitment no.</th></tr></thead>
+      <tbody>
+        <tr><td><code>deal-1</code></td><td>Acme AI, Inc.</td><td>USA</td><td><code>2000000</code></td><td>USD</td><td><code>:safe</code></td><td><code>:exited</code></td><td>ai</td><td>seed</td><td><code>USA-00000000</code></td></tr>
+        <tr><td><code>deal-2</code></td><td>Orbit Robotics KK</td><td>ATL</td><td><code>500000</code></td><td>USD</td><td><code>:priced-equity</code></td><td><code>:sourced</code></td><td>robotics</td><td>series-a</td><td><span class="muted">none</span></td></tr>
+        <tr><td><code>deal-3</code></td><td>Shady Corp</td><td>USA</td><td><code>300000</code></td><td>USD</td><td><code>:convertible-note</code></td><td><code>:sourced</code></td><td>fintech</td><td>seed</td><td><span class="muted">none</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Operations in this run</h2>
+    <p class="lead">One row per actor run. 'Governor + phase' is the disposition before any human saw it; 'Final' is after the human resumed the interrupted graph. Confidence and violation rules come from the InvestmentCommitteeGovernor verdict.</p>
+    <table>
+      <thead><tr><th>Thread</th><th>Op</th><th>Subject</th><th>Governor + phase</th><th>Human</th><th>Final</th><th>Confidence</th><th>Stake</th><th>HARD violations</th></tr></thead>
+      <tbody>
+        <tr><td><code>t1</code></td><td><code>:lp/intake</code></td><td><code>lp-1</code></td><td><span class="ok">commit</span></td><td><span class="muted">n/a</span></td><td><span class="ok">commit</span></td><td><code>0.97</code></td><td><span class="muted">no</span></td><td><span class="muted">clean</span></td></tr>
+        <tr><td><code>t2</code></td><td><code>:dd/assess</code></td><td><code>deal-1</code></td><td><span class="warn">escalate (human)</span></td><td><span class="ok">approved by op-1</span></td><td><span class="ok">commit</span></td><td><code>0.9</code></td><td><span class="muted">no</span></td><td><span class="muted">clean</span></td></tr>
+        <tr><td><code>t3</code></td><td><code>:kyc/screen</code></td><td><code>party-1</code></td><td><span class="warn">escalate (human)</span></td><td><span class="ok">approved by op-1</span></td><td><span class="ok">commit</span></td><td><code>0.9</code></td><td><span class="muted">no</span></td><td><span class="muted">clean</span></td></tr>
+        <tr><td><code>t4</code></td><td><code>:kyc/screen</code></td><td><code>party-2</code></td><td><span class="warn">escalate (human)</span></td><td><span class="ok">approved by op-1</span></td><td><span class="ok">commit</span></td><td><code>0.9</code></td><td><span class="muted">no</span></td><td><span class="muted">clean</span></td></tr>
+        <tr><td><code>t5</code></td><td><code>:deal/advance-stage</code></td><td><code>deal-1</code></td><td><span class="ok">commit</span></td><td><span class="muted">n/a</span></td><td><span class="ok">commit</span></td><td><code>0.9</code></td><td><span class="muted">no</span></td><td><span class="muted">clean</span></td></tr>
+        <tr><td><code>t6</code></td><td><code>:term-sheet/propose</code></td><td><code>deal-1</code></td><td><span class="ok">commit</span></td><td><span class="muted">n/a</span></td><td><span class="ok">commit</span></td><td><code>0.9</code></td><td><span class="muted">no</span></td><td><span class="muted">clean</span></td></tr>
+        <tr><td><code>t7</code></td><td><code>:term-sheet/sign</code></td><td><code>deal-1</code></td><td><span class="ok">commit</span></td><td><span class="muted">n/a</span></td><td><span class="ok">commit</span></td><td><code>0.9</code></td><td><span class="muted">no</span></td><td><span class="muted">clean</span></td></tr>
+        <tr><td><code>t8</code></td><td><code>:term-sheet/sign</code></td><td><code>deal-1</code></td><td><span class="ok">commit</span></td><td><span class="muted">n/a</span></td><td><span class="ok">commit</span></td><td><code>0.9</code></td><td><span class="muted">no</span></td><td><span class="muted">clean</span></td></tr>
+        <tr><td><code>t9</code></td><td><code>:capital-call/issue</code></td><td><code>deal-1</code></td><td><span class="warn">escalate (human)</span></td><td><span class="ok">approved by op-1</span></td><td><span class="ok">commit</span></td><td><code>0.9</code></td><td><span class="warn">actuation</span></td><td><span class="muted">clean</span></td></tr>
+        <tr><td><code>t10</code></td><td><code>:investment/commit</code></td><td><code>deal-1</code></td><td><span class="warn">escalate (human)</span></td><td><span class="ok">approved by op-1</span></td><td><span class="ok">commit</span></td><td><code>0.9</code></td><td><span class="warn">actuation</span></td><td><span class="muted">clean</span></td></tr>
+        <tr><td><code>t11</code></td><td><code>:investment/follow-on</code></td><td><code>deal-1</code></td><td><span class="warn">escalate (human)</span></td><td><span class="ok">approved by op-1</span></td><td><span class="ok">commit</span></td><td><code>0.9</code></td><td><span class="warn">actuation</span></td><td><span class="muted">clean</span></td></tr>
+        <tr><td><code>t12</code></td><td><code>:governance/board-seat</code></td><td><code>deal-1</code></td><td><span class="ok">commit</span></td><td><span class="muted">n/a</span></td><td><span class="ok">commit</span></td><td><code>0.9</code></td><td><span class="muted">no</span></td><td><span class="muted">clean</span></td></tr>
+        <tr><td><code>t13</code></td><td><code>:portfolio/report</code></td><td><code>deal-1</code></td><td><span class="ok">commit</span></td><td><span class="muted">n/a</span></td><td><span class="ok">commit</span></td><td><code>0.9</code></td><td><span class="muted">no</span></td><td><span class="muted">clean</span></td></tr>
+        <tr><td><code>t14</code></td><td><code>:exit/distribute</code></td><td><code>deal-1</code></td><td><span class="warn">escalate (human)</span></td><td><span class="ok">approved by op-1</span></td><td><span class="ok">commit</span></td><td><code>0.9</code></td><td><span class="warn">actuation</span></td><td><span class="muted">clean</span></td></tr>
+        <tr><td><code>t15</code></td><td><code>:waterfall/clawback-repay</code></td><td><code>fund</code></td><td><span class="warn">escalate (human)</span></td><td><span class="ok">approved by op-1</span></td><td><span class="ok">commit</span></td><td><code>0.9</code></td><td><span class="warn">actuation</span></td><td><span class="muted">clean</span></td></tr>
+        <tr><td><code>h1</code></td><td><code>:investment/commit</code></td><td><code>deal-2</code></td><td><span class="critical">HARD hold</span></td><td><span class="muted">n/a</span></td><td><span class="critical">HARD hold</span></td><td><code>0.3</code></td><td><span class="warn">actuation</span></td><td><span class="critical">:no-spec-basis</span> <span class="critical">:dd-incomplete</span> <span class="critical">:stage-insufficient</span> <span class="critical">:term-sheet-missing</span></td></tr>
+        <tr><td><code>h2</code></td><td><code>:kyc/screen</code></td><td><code>party-3</code></td><td><span class="critical">HARD hold</span></td><td><span class="muted">n/a</span></td><td><span class="critical">HARD hold</span></td><td><code>0.95</code></td><td><span class="muted">no</span></td><td><span class="critical">:sanctions-hit</span></td></tr>
+        <tr><td><code>h3</code></td><td><code>:dd/assess</code></td><td><code>deal-2</code></td><td><span class="critical">HARD hold</span></td><td><span class="muted">n/a</span></td><td><span class="critical">HARD hold</span></td><td><code>0.9</code></td><td><span class="muted">no</span></td><td><span class="critical">:no-spec-basis</span></td></tr>
+        <tr><td><code>h4</code></td><td><code>:capital-call/issue</code></td><td><code>deal-3</code></td><td><span class="critical">HARD hold</span></td><td><span class="muted">n/a</span></td><td><span class="critical">HARD hold</span></td><td><code>0.3</code></td><td><span class="warn">actuation</span></td><td><span class="critical">:capital-call-overcall</span></td></tr>
+        <tr><td><code>h5</code></td><td><code>:deal/advance-stage</code></td><td><code>deal-3</code></td><td><span class="critical">HARD hold</span></td><td><span class="muted">n/a</span></td><td><span class="critical">HARD hold</span></td><td><code>0.2</code></td><td><span class="muted">no</span></td><td><span class="critical">:invalid-stage-transition</span></td></tr>
+        <tr><td><code>h6</code></td><td><code>:term-sheet/propose</code></td><td><code>deal-1</code></td><td><span class="critical">HARD hold</span></td><td><span class="muted">n/a</span></td><td><span class="critical">HARD hold</span></td><td><code>0.2</code></td><td><span class="muted">no</span></td><td><span class="critical">:term-sheet-after-commitment</span></td></tr>
+        <tr><td><code>h7</code></td><td><code>:term-sheet/propose</code></td><td><code>deal-3</code></td><td><span class="ok">commit</span></td><td><span class="muted">n/a</span></td><td><span class="ok">commit</span></td><td><code>0.9</code></td><td><span class="muted">no</span></td><td><span class="muted">clean</span></td></tr>
+        <tr><td><code>h8</code></td><td><code>:investment/commit</code></td><td><code>deal-3</code></td><td><span class="critical">HARD hold</span></td><td><span class="muted">n/a</span></td><td><span class="critical">HARD hold</span></td><td><code>0.3</code></td><td><span class="warn">actuation</span></td><td><span class="critical">:no-spec-basis</span> <span class="critical">:dd-incomplete</span> <span class="critical">:stage-insufficient</span> <span class="critical">:term-sheet-not-executed</span></td></tr>
+        <tr><td><code>h9</code></td><td><code>:investment/follow-on</code></td><td><code>deal-2</code></td><td><span class="critical">HARD hold</span></td><td><span class="muted">n/a</span></td><td><span class="critical">HARD hold</span></td><td><code>0.2</code></td><td><span class="warn">actuation</span></td><td><span class="critical">:follow-on-requires-prior-commitment</span></td></tr>
+        <tr><td><code>h10</code></td><td><code>:governance/board-seat</code></td><td><code>deal-2</code></td><td><span class="critical">HARD hold</span></td><td><span class="muted">n/a</span></td><td><span class="critical">HARD hold</span></td><td><code>0.2</code></td><td><span class="muted">no</span></td><td><span class="critical">:board-seat-without-commitment</span></td></tr>
+        <tr><td><code>h11</code></td><td><code>:portfolio/report</code></td><td><code>deal-2</code></td><td><span class="critical">HARD hold</span></td><td><span class="muted">n/a</span></td><td><span class="critical">HARD hold</span></td><td><code>0.2</code></td><td><span class="muted">no</span></td><td><span class="critical">:portfolio-report-without-commitment</span></td></tr>
+        <tr><td><code>h12</code></td><td><code>:exit/distribute</code></td><td><code>deal-3</code></td><td><span class="critical">HARD hold</span></td><td><span class="muted">n/a</span></td><td><span class="critical">HARD hold</span></td><td><code>0.2</code></td><td><span class="warn">actuation</span></td><td><span class="critical">:commitment-missing</span></td></tr>
+        <tr><td><code>h13</code></td><td><code>:waterfall/clawback-repay</code></td><td><code>fund</code></td><td><span class="critical">HARD hold</span></td><td><span class="muted">n/a</span></td><td><span class="critical">HARD hold</span></td><td><code>0.2</code></td><td><span class="warn">actuation</span></td><td><span class="critical">:clawback-exceeds-entitlement</span></td></tr>
+        <tr><td><code>h14</code></td><td><code>:lp/intake</code></td><td><code>lp-2</code></td><td><span class="ok">commit</span></td><td><span class="muted">n/a</span></td><td><span class="ok">commit</span></td><td><code>0.97</code></td><td><span class="muted">no</span></td><td><span class="muted">clean</span></td></tr>
+        <tr><td><code>h15</code></td><td><code>:capital-call/issue</code></td><td><code>deal-2</code></td><td><span class="critical">HARD hold</span></td><td><span class="muted">n/a</span></td><td><span class="critical">HARD hold</span></td><td><code>0.9</code></td><td><span class="warn">actuation</span></td><td><span class="critical">:accredited-investor-violation</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Human approvals — can the store say who approved?</h2>
+    <p class="lead">Measured at render time by scanning the store artifacts each committed effect writes for any approver-named key.</p>
+    <p class="lead">8 operation(s) in this run were approved by a human Investment Committee member. The graph knew the approver for 8 of them, and handed an approver on the commit record's :payload for 8.</p>
+    <p class="callout-bad">PARTIAL ATTRIBUTION. 3 of 8 approved operations keep the approver in the store (:dd/assess, :kyc/screen, :kyc/screen); 5 lose it (:capital-call/issue, :investment/commit, :investment/follow-on, :exit/distribute, :waterfall/clawback-repay). Those are exactly the effects whose store handler rebuilds the record from :path and the deal/LP directory instead of persisting the :payload it was handed, so the approver travels as far as the store's front door and no further. "Who approved this?" cannot be answered from the SSoT for those operations.</p>
+    <p class="callout-bad">The append-only audit ledger does NOT carry the approval either: the :approval-granted fact is produced by the graph's :request-approval node into the run's :audit channel, but the :commit node only appends its own :committed fact, so the approval never reaches store/append-ledger!. Reading this console, you cannot distinguish "nobody approved it" from "the store did not keep who did" for any operation marked NOT RECOVERABLE above -- except by trusting this page's own run log, which is in-memory graph state, not the SSoT.</p>
+    <p class="muted">This section is a measurement, not an assertion: vcfund.render-html/approver-hits scans each artifact for any key named approved-by / approved_by / approver / by. If the defect is ever fixed, this page reports the fix without being edited.</p>
+    <table>
+      <thead><tr><th>Op</th><th>Subject</th><th>Effect</th><th>Approver (graph state)</th><th>Approver handed to store (:payload)</th><th>Artifacts scanned</th><th>Approver readable back from store</th></tr></thead>
+      <tbody>
+        <tr><td><code>:dd/assess</code></td><td><code>deal-1</code></td><td><code>:assessment/set</code></td><td><code>op-1</code></td><td><code>op-1</code></td><td><code>1</code></td><td><span class="ok">recoverable</span> <code>:approved-by = op-1</code></td></tr>
+        <tr><td><code>:kyc/screen</code></td><td><code>party-1</code></td><td><code>:kyc/set</code></td><td><code>op-1</code></td><td><code>op-1</code></td><td><code>1</code></td><td><span class="ok">recoverable</span> <code>:approved-by = op-1</code></td></tr>
+        <tr><td><code>:kyc/screen</code></td><td><code>party-2</code></td><td><code>:kyc/set</code></td><td><code>op-1</code></td><td><code>op-1</code></td><td><code>1</code></td><td><span class="ok">recoverable</span> <code>:approved-by = op-1</code></td></tr>
+        <tr><td><code>:capital-call/issue</code></td><td><code>deal-1</code></td><td><code>:capital-call/mark-issued</code></td><td><code>op-1</code></td><td><code>op-1</code></td><td><code>1</code></td><td><span class="critical">not recoverable</span></td></tr>
+        <tr><td><code>:investment/commit</code></td><td><code>deal-1</code></td><td><code>:investment/mark-committed</code></td><td><code>op-1</code></td><td><code>op-1</code></td><td><code>1</code></td><td><span class="critical">not recoverable</span></td></tr>
+        <tr><td><code>:investment/follow-on</code></td><td><code>deal-1</code></td><td><code>:investment/follow-on-committed</code></td><td><code>op-1</code></td><td><code>op-1</code></td><td><code>1</code></td><td><span class="critical">not recoverable</span></td></tr>
+        <tr><td><code>:exit/distribute</code></td><td><code>deal-1</code></td><td><code>:distribution/mark-paid</code></td><td><code>op-1</code></td><td><code>op-1</code></td><td><code>1</code></td><td><span class="critical">not recoverable</span></td></tr>
+        <tr><td><code>:waterfall/clawback-repay</code></td><td><code>fund</code></td><td><code>:waterfall/clawback-repaid</code></td><td><code>op-1</code></td><td><code>op-1</code></td><td><code>1</code></td><td><span class="critical">not recoverable</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>HARD governor holds</h2>
+    <p class="lead">13 proposals were refused outright. A HARD violation cannot be overridden by a human approver — these never reach the approval node at all.</p>
+    <table>
+      <thead><tr><th>Op</th><th>Subject</th><th>Confidence</th><th>Rules</th><th>Governor detail</th></tr></thead>
+      <tbody>
+        <tr><td><code>:investment/commit</code></td><td><code>deal-2</code></td><td><code>0.3</code></td><td><span class="critical">:no-spec-basis</span> <span class="critical">:dd-incomplete</span> <span class="critical">:stage-insufficient</span> <span class="critical">:term-sheet-missing</span></td><td>公式spec-basisの引用が無い提案はfund-formation要件として扱えない<br>案件の必要DD書類が充足していない状態での投資実行提案<br>案件がInvestment Committeeレビュー段階に到達していない状態での投資実行提案<br>term sheetが一度も提案されていない状態での投資実行提案</td></tr>
+        <tr><td><code>:kyc/screen</code></td><td><code>party-3</code></td><td><code>0.95</code></td><td><span class="critical">:sanctions-hit</span></td><td>制裁/PEPリスト一致のある関係者を含む案件は進められない</td></tr>
+        <tr><td><code>:dd/assess</code></td><td><code>deal-2</code></td><td><code>0.9</code></td><td><span class="critical">:no-spec-basis</span></td><td>公式spec-basisの引用が無い提案はfund-formation要件として扱えない</td></tr>
+        <tr><td><code>:capital-call/issue</code></td><td><code>deal-3</code></td><td><code>0.3</code></td><td><span class="critical">:capital-call-overcall</span></td><td>2件のLPでコミットメント額を超過するコールとなるため発行不可</td></tr>
+        <tr><td><code>:deal/advance-stage</code></td><td><code>deal-3</code></td><td><code>0.2</code></td><td><span class="critical">:invalid-stage-transition</span></td><td>:sourced から :committed への遷移は許可されていない</td></tr>
+        <tr><td><code>:term-sheet/propose</code></td><td><code>deal-1</code></td><td><code>0.2</code></td><td><span class="critical">:term-sheet-after-commitment</span></td><td>投資実行(commit)済みの案件へのterm sheet提案は不可</td></tr>
+        <tr><td><code>:investment/commit</code></td><td><code>deal-3</code></td><td><code>0.3</code></td><td><span class="critical">:no-spec-basis</span> <span class="critical">:dd-incomplete</span> <span class="critical">:stage-insufficient</span> <span class="critical">:term-sheet-not-executed</span></td><td>公式spec-basisの引用が無い提案はfund-formation要件として扱えない<br>案件の必要DD書類が充足していない状態での投資実行提案<br>案件がInvestment Committeeレビュー段階に到達していない状態での投資実行提案<br>最新term sheetバージョンが双方署名済みでない状態での投資実行提案</td></tr>
+        <tr><td><code>:investment/follow-on</code></td><td><code>deal-2</code></td><td><code>0.2</code></td><td><span class="critical">:follow-on-requires-prior-commitment</span></td><td>既存commitmentが無い、または既にexit済みの案件へのfollow-on投資提案</td></tr>
+        <tr><td><code>:governance/board-seat</code></td><td><code>deal-2</code></td><td><code>0.2</code></td><td><span class="critical">:board-seat-without-commitment</span></td><td>投資実行(commit)されていない案件へのboard seat付与/剥奪提案</td></tr>
+        <tr><td><code>:portfolio/report</code></td><td><code>deal-2</code></td><td><code>0.2</code></td><td><span class="critical">:portfolio-report-without-commitment</span></td><td>投資実行(commit)されていない案件へのポートフォリオレポート提案</td></tr>
+        <tr><td><code>:exit/distribute</code></td><td><code>deal-3</code></td><td><code>0.2</code></td><td><span class="critical">:commitment-missing</span></td><td>対応するinvestment commitmentレコードが無い状態でのexit分配提案</td></tr>
+        <tr><td><code>:waterfall/clawback-repay</code></td><td><code>fund</code></td><td><code>0.2</code></td><td><span class="critical">:clawback-exceeds-entitlement</span></td><td>要求返金額999999999が算定whole-fund clawback額0.0を超過</td></tr>
+        <tr><td><code>:capital-call/issue</code></td><td><code>deal-2</code></td><td><code>0.9</code></td><td><span class="critical">:accredited-investor-violation</span></td><td>適格投資家確認が未了のLPが1件存在するため実行不可</td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>HARD rule coverage exercised by this run</h2>
+    <p class="lead">Distinct HARD rules this scenario actually provoked, derived from the ledger rather than from a hand-maintained list.</p>
+    <table>
+      <thead><tr><th>Rule</th><th>Times fired</th><th>Provoked by</th><th>Detail</th></tr></thead>
+      <tbody>
+        <tr><td><span class="critical">:accredited-investor-violation</span></td><td><code>1</code></td><td><code>:capital-call/issue deal-2</code></td><td>適格投資家確認が未了のLPが1件存在するため実行不可</td></tr>
+        <tr><td><span class="critical">:board-seat-without-commitment</span></td><td><code>1</code></td><td><code>:governance/board-seat deal-2</code></td><td>投資実行(commit)されていない案件へのboard seat付与/剥奪提案</td></tr>
+        <tr><td><span class="critical">:capital-call-overcall</span></td><td><code>1</code></td><td><code>:capital-call/issue deal-3</code></td><td>2件のLPでコミットメント額を超過するコールとなるため発行不可</td></tr>
+        <tr><td><span class="critical">:clawback-exceeds-entitlement</span></td><td><code>1</code></td><td><code>:waterfall/clawback-repay fund</code></td><td>要求返金額999999999が算定whole-fund clawback額0.0を超過</td></tr>
+        <tr><td><span class="critical">:commitment-missing</span></td><td><code>1</code></td><td><code>:exit/distribute deal-3</code></td><td>対応するinvestment commitmentレコードが無い状態でのexit分配提案</td></tr>
+        <tr><td><span class="critical">:dd-incomplete</span></td><td><code>2</code></td><td><code>:investment/commit deal-2</code>, <code>:investment/commit deal-3</code></td><td>案件の必要DD書類が充足していない状態での投資実行提案</td></tr>
+        <tr><td><span class="critical">:follow-on-requires-prior-commitment</span></td><td><code>1</code></td><td><code>:investment/follow-on deal-2</code></td><td>既存commitmentが無い、または既にexit済みの案件へのfollow-on投資提案</td></tr>
+        <tr><td><span class="critical">:invalid-stage-transition</span></td><td><code>1</code></td><td><code>:deal/advance-stage deal-3</code></td><td>:sourced から :committed への遷移は許可されていない</td></tr>
+        <tr><td><span class="critical">:no-spec-basis</span></td><td><code>3</code></td><td><code>:investment/commit deal-2</code>, <code>:dd/assess deal-2</code>, <code>:investment/commit deal-3</code></td><td>公式spec-basisの引用が無い提案はfund-formation要件として扱えない</td></tr>
+        <tr><td><span class="critical">:portfolio-report-without-commitment</span></td><td><code>1</code></td><td><code>:portfolio/report deal-2</code></td><td>投資実行(commit)されていない案件へのポートフォリオレポート提案</td></tr>
+        <tr><td><span class="critical">:sanctions-hit</span></td><td><code>1</code></td><td><code>:kyc/screen party-3</code></td><td>制裁/PEPリスト一致のある関係者を含む案件は進められない</td></tr>
+        <tr><td><span class="critical">:stage-insufficient</span></td><td><code>2</code></td><td><code>:investment/commit deal-2</code>, <code>:investment/commit deal-3</code></td><td>案件がInvestment Committeeレビュー段階に到達していない状態での投資実行提案</td></tr>
+        <tr><td><span class="critical">:term-sheet-after-commitment</span></td><td><code>1</code></td><td><code>:term-sheet/propose deal-1</code></td><td>投資実行(commit)済みの案件へのterm sheet提案は不可</td></tr>
+        <tr><td><span class="critical">:term-sheet-missing</span></td><td><code>1</code></td><td><code>:investment/commit deal-2</code></td><td>term sheetが一度も提案されていない状態での投資実行提案</td></tr>
+        <tr><td><span class="critical">:term-sheet-not-executed</span></td><td><code>1</code></td><td><code>:investment/commit deal-3</code></td><td>最新term sheetバージョンが双方署名済みでない状態での投資実行提案</td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Phase-3 autonomy (vcfund.phase/phases)</h2>
+    <p class="lead">Read directly out of the phase table for phase 3 (supervised-auto) and joined against what each op actually did above. The five capital-moving ops are absent from every phase's :auto set as a structural fact, not a rollout milestone.</p>
+    <table>
+      <thead><tr><th>Op</th><th>Phase-3 posture</th><th>Observed in this run</th></tr></thead>
+      <tbody>
+        <tr><td><code>:capital-call/issue</code></td><td><span class="warn">human approval required</span></td><td><span class="warn">escalate (human)</span> &rarr; <span class="ok">commit</span> <span class="critical">HARD hold</span></td></tr>
+        <tr><td><code>:dd/assess</code></td><td><span class="warn">human approval required</span></td><td><span class="warn">escalate (human)</span> &rarr; <span class="ok">commit</span> <span class="critical">HARD hold</span></td></tr>
+        <tr><td><code>:deal/advance-stage</code></td><td><span class="ok">auto-commit when governor-clean</span></td><td><span class="ok">commit</span> <span class="critical">HARD hold</span></td></tr>
+        <tr><td><code>:exit/distribute</code></td><td><span class="warn">human approval required</span></td><td><span class="warn">escalate (human)</span> &rarr; <span class="ok">commit</span> <span class="critical">HARD hold</span></td></tr>
+        <tr><td><code>:governance/board-seat</code></td><td><span class="ok">auto-commit when governor-clean</span></td><td><span class="ok">commit</span> <span class="critical">HARD hold</span></td></tr>
+        <tr><td><code>:investment/commit</code></td><td><span class="warn">human approval required</span></td><td><span class="warn">escalate (human)</span> &rarr; <span class="ok">commit</span> <span class="critical">HARD hold</span></td></tr>
+        <tr><td><code>:investment/follow-on</code></td><td><span class="warn">human approval required</span></td><td><span class="warn">escalate (human)</span> &rarr; <span class="ok">commit</span> <span class="critical">HARD hold</span></td></tr>
+        <tr><td><code>:kyc/screen</code></td><td><span class="warn">human approval required</span></td><td><span class="warn">escalate (human)</span> &rarr; <span class="ok">commit</span> <span class="critical">HARD hold</span></td></tr>
+        <tr><td><code>:lp/intake</code></td><td><span class="ok">auto-commit when governor-clean</span></td><td><span class="ok">commit</span></td></tr>
+        <tr><td><code>:portfolio/report</code></td><td><span class="ok">auto-commit when governor-clean</span></td><td><span class="ok">commit</span> <span class="critical">HARD hold</span></td></tr>
+        <tr><td><code>:term-sheet/propose</code></td><td><span class="ok">auto-commit when governor-clean</span></td><td><span class="ok">commit</span> <span class="critical">HARD hold</span></td></tr>
+        <tr><td><code>:term-sheet/sign</code></td><td><span class="ok">auto-commit when governor-clean</span></td><td><span class="ok">commit</span></td></tr>
+        <tr><td><code>:waterfall/clawback-repay</code></td><td><span class="warn">human approval required</span></td><td><span class="warn">escalate (human)</span> &rarr; <span class="ok">commit</span> <span class="critical">HARD hold</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Audit ledger (this run)</h2>
+    <p class="lead">The append-only decision-fact log vcfund.store/append-ledger! actually wrote.</p>
+    <table>
+      <thead><tr><th>Fact</th><th>Op</th><th>Subject</th><th>Disposition</th><th>Basis</th><th>Summary</th></tr></thead>
+      <tbody>
+        <tr><td><span class="ok">committed</span></td><td><code>:lp/intake</code></td><td><code>lp-1</code></td><td>:commit</td><td>:id | :status</td><td>LPレコード更新: (:id :status)</td></tr>
+        <tr><td><span class="ok">committed</span></td><td><code>:dd/assess</code></td><td><code>deal-1</code></td><td>:commit</td><td>Regulation D Rule 506(b)/506(c) (17 CFR §230.506); Investment Company Act of 1940 §3(c)(1)/§3(c)(7) | https://www.sec.gov/ ; https://ilpa.org/ ; https://nvca.org/</td><td>USA (U.S. Securities and Exchange Commission (SEC)) 向けDDチェックリスト 4 件を提案</td></tr>
+        <tr><td><span class="ok">committed</span></td><td><code>:kyc/screen</code></td><td><code>party-1</code></td><td>:commit</td><td>:id-doc | :sanctions-list | :corporate-intelligence</td><td>Jane Founder: 制裁リスト一致なし、本人確認書類あり</td></tr>
+        <tr><td><span class="ok">committed</span></td><td><code>:kyc/screen</code></td><td><code>party-2</code></td><td>:commit</td><td>:id-doc | :sanctions-list | :corporate-intelligence</td><td>John Cofounder: 制裁リスト一致なし、本人確認書類あり</td></tr>
+        <tr><td><span class="ok">committed</span></td><td><code>:deal/advance-stage</code></td><td><code>deal-1</code></td><td>:commit</td><td>:sourced</td><td>deal-1: :sourced -&gt; :ic-review</td></tr>
+        <tr><td><span class="ok">committed</span></td><td><code>:term-sheet/propose</code></td><td><code>deal-1</code></td><td>:commit</td><td>:valuation | :security-type | :pro-rata-rights | :board-seat</td><td>deal-1 term sheet v0 (fund 提案)</td></tr>
+        <tr><td><span class="ok">committed</span></td><td><code>:term-sheet/sign</code></td><td><code>deal-1</code></td><td>:commit</td><td>0</td><td>deal-1 term sheet v0 へ fund が署名</td></tr>
+        <tr><td><span class="ok">committed</span></td><td><code>:term-sheet/sign</code></td><td><code>deal-1</code></td><td>:commit</td><td>0</td><td>deal-1 term sheet v0 へ founder が署名</td></tr>
+        <tr><td><span class="ok">committed</span></td><td><code>:capital-call/issue</code></td><td><code>deal-1</code></td><td>:commit</td><td>lp-1 | lp-2</td><td>deal-1 向け資金化のためLP 2者へキャピタルコール 2000000 を発行提案</td></tr>
+        <tr><td><span class="ok">committed</span></td><td><code>:investment/commit</code></td><td><code>deal-1</code></td><td>:commit</td><td>https://www.sec.gov/ ; https://ilpa.org/ ; https://nvca.org/</td><td>Acme AI, Inc. (USA) への投資実行準備ができました</td></tr>
+        <tr><td><span class="ok">committed</span></td><td><code>:investment/follow-on</code></td><td><code>deal-1</code></td><td>:commit</td><td>USA-00000000</td><td>Acme AI, Inc. へのfollow-on投資 750000 を提案</td></tr>
+        <tr><td><span class="ok">committed</span></td><td><code>:governance/board-seat</code></td><td><code>deal-1</code></td><td>:commit</td><td>granted | board-member</td><td>deal-1: party-1 へのboard seat granted (board-member)</td></tr>
+        <tr><td><span class="ok">committed</span></td><td><code>:portfolio/report</code></td><td><code>deal-1</code></td><td>:commit</td><td>:revenue | :burn-rate | :runway-months | :headcount</td><td>deal-1 (2026-Q3) のポートフォリオレポート提案</td></tr>
+        <tr><td><span class="ok">committed</span></td><td><code>:exit/distribute</code></td><td><code>deal-1</code></td><td>:commit</td><td>USA-00000000</td><td>deal-1 のexit分配提案 (proceeds=12000000)</td></tr>
+        <tr><td><span class="ok">committed</span></td><td><code>:waterfall/clawback-repay</code></td><td><code>fund</code></td><td>:commit</td><td>:whole-fund-waterfall</td><td>GP clawback返金 1904000.0 を提案 (算定額 1904000.0)</td></tr>
+        <tr><td><span class="critical">governor-hold</span></td><td><code>:investment/commit</code></td><td><code>deal-2</code></td><td>:hold</td><td>:no-spec-basis | :dd-incomplete | :stage-insufficient | :term-sheet-missing</td><td></td></tr>
+        <tr><td><span class="critical">governor-hold</span></td><td><code>:kyc/screen</code></td><td><code>party-3</code></td><td>:hold</td><td>:sanctions-hit</td><td></td></tr>
+        <tr><td><span class="critical">governor-hold</span></td><td><code>:dd/assess</code></td><td><code>deal-2</code></td><td>:hold</td><td>:no-spec-basis</td><td></td></tr>
+        <tr><td><span class="critical">governor-hold</span></td><td><code>:capital-call/issue</code></td><td><code>deal-3</code></td><td>:hold</td><td>:capital-call-overcall</td><td></td></tr>
+        <tr><td><span class="critical">governor-hold</span></td><td><code>:deal/advance-stage</code></td><td><code>deal-3</code></td><td>:hold</td><td>:invalid-stage-transition</td><td></td></tr>
+        <tr><td><span class="critical">governor-hold</span></td><td><code>:term-sheet/propose</code></td><td><code>deal-1</code></td><td>:hold</td><td>:term-sheet-after-commitment</td><td></td></tr>
+        <tr><td><span class="ok">committed</span></td><td><code>:term-sheet/propose</code></td><td><code>deal-3</code></td><td>:commit</td><td>:valuation</td><td>deal-3 term sheet v0 (fund 提案)</td></tr>
+        <tr><td><span class="critical">governor-hold</span></td><td><code>:investment/commit</code></td><td><code>deal-3</code></td><td>:hold</td><td>:no-spec-basis | :dd-incomplete | :stage-insufficient | :term-sheet-not-executed</td><td></td></tr>
+        <tr><td><span class="critical">governor-hold</span></td><td><code>:investment/follow-on</code></td><td><code>deal-2</code></td><td>:hold</td><td>:follow-on-requires-prior-commitment</td><td></td></tr>
+        <tr><td><span class="critical">governor-hold</span></td><td><code>:governance/board-seat</code></td><td><code>deal-2</code></td><td>:hold</td><td>:board-seat-without-commitment</td><td></td></tr>
+        <tr><td><span class="critical">governor-hold</span></td><td><code>:portfolio/report</code></td><td><code>deal-2</code></td><td>:hold</td><td>:portfolio-report-without-commitment</td><td></td></tr>
+        <tr><td><span class="critical">governor-hold</span></td><td><code>:exit/distribute</code></td><td><code>deal-3</code></td><td>:hold</td><td>:commitment-missing</td><td></td></tr>
+        <tr><td><span class="critical">governor-hold</span></td><td><code>:waterfall/clawback-repay</code></td><td><code>fund</code></td><td>:hold</td><td>:clawback-exceeds-entitlement</td><td></td></tr>
+        <tr><td><span class="ok">committed</span></td><td><code>:lp/intake</code></td><td><code>lp-2</code></td><td>:commit</td><td>:id | :accredited?</td><td>LPレコード更新: (:id :accredited?)</td></tr>
+        <tr><td><span class="critical">governor-hold</span></td><td><code>:capital-call/issue</code></td><td><code>deal-2</code></td><td>:hold</td><td>:accredited-investor-violation</td><td></td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Capital-call notices issued</h2>
+    <p class="lead">Drafts built by vcfund.registry/register-capital-call.</p>
+    <table>
+      <thead><tr><th>record_id</th><th>kind</th><th>call_amount</th><th>allocations</th><th>notice_date</th><th>funding_due_days</th><th>immutable</th></tr></thead>
+      <tbody>
+        <tr><td><code>USA-CALL-000000</code></td><td><code>capital-call-draft</code></td><td><code>2000000.0</code></td><td><code>[{"lp_id" "lp-1", "allocation" 1666666.6666666667, "new_called_amount" 1666666.6666666667} {"lp_id" "lp-2", "allocation" 333333.3333333333, "new_called_amount" 333333.3333333333}]</code></td><td><code>2026-07-06</code></td><td><code>10</code></td><td><code>true</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Investment commitments</h2>
+    <p class="lead">Drafts built by vcfund.registry/register-commitment.</p>
+    <table>
+      <thead><tr><th>record_id</th><th>kind</th><th>portfolio_company</th><th>security_type</th><th>amount</th><th>jurisdiction</th><th>immutable</th></tr></thead>
+      <tbody>
+        <tr><td><code>USA-00000000</code></td><td><code>commitment-draft</code></td><td><code>Acme AI, Inc.</code></td><td><code>safe</code></td><td><code>2000000</code></td><td><code>USA</code></td><td><code>true</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Follow-on commitments (deal-1)</h2>
+    <p class="lead">Drafts built by vcfund.registry/register-follow-on-commitment, referencing the original commitment number.</p>
+    <table>
+      <thead><tr><th>record_id</th><th>kind</th><th>portfolio_company</th><th>original_commitment_number</th><th>security_type</th><th>amount</th><th>jurisdiction</th><th>immutable</th></tr></thead>
+      <tbody>
+        <tr><td><code>USA-FOLLOWON-00000000</code></td><td><code>follow-on-commitment-draft</code></td><td><code>Acme AI, Inc.</code></td><td><code>USA-00000000</code></td><td><code>priced-equity</code></td><td><code>750000</code></td><td><code>USA</code></td><td><code>true</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Term sheets and e-signatures (deal-1, deal-3)</h2>
+    <p class="lead">deal-1 v0 is fully executed (fund + founder). deal-3 v0 was proposed and never signed, which is why the deal-3 commit attempt HARD-held.</p>
+    <table>
+      <thead><tr><th>record_id</th><th>kind</th><th>deal_id</th><th>version</th><th>proposed_by</th><th>terms</th><th>immutable</th></tr></thead>
+      <tbody>
+        <tr><td><code>deal-1#term-sheet-v0</code></td><td><code>term-sheet-draft</code></td><td><code>deal-1</code></td><td><code>0</code></td><td><code>fund</code></td><td><code>{:valuation 8000000, :security-type :safe, :pro-rata-rights true, :board-seat false}</code></td><td><code>true</code></td></tr>
+        <tr><td><code>deal-3#term-sheet-v0</code></td><td><code>term-sheet-draft</code></td><td><code>deal-3</code></td><td><code>0</code></td><td><code>fund</code></td><td><code>{:valuation 1500000}</code></td><td><code>true</code></td></tr>
+      </tbody>
+    </table>
+    <table>
+      <thead><tr><th>record_id</th><th>kind</th><th>deal_id</th><th>version</th><th>signed_by</th><th>immutable</th></tr></thead>
+      <tbody>
+        <tr><td><code>deal-1#term-sheet-v0#signed-by-fund</code></td><td><code>term-sheet-signature</code></td><td><code>deal-1</code></td><td><code>0</code></td><td><code>fund</code></td><td><code>true</code></td></tr>
+        <tr><td><code>deal-1#term-sheet-v0#signed-by-founder</code></td><td><code>term-sheet-signature</code></td><td><code>deal-1</code></td><td><code>0</code></td><td><code>founder</code></td><td><code>true</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Board seats (deal-1)</h2>
+    <p class="lead">Append-only event history, plus the CURRENT roster projected from it by vcfund.registry/current-board-seats (1 seated).</p>
+    <table>
+      <thead><tr><th>record_id</th><th>kind</th><th>deal_id</th><th>seat_holder</th><th>seat_type</th><th>event</th><th>effective_date</th><th>immutable</th></tr></thead>
+      <tbody>
+        <tr><td><code>deal-1#board-seat-0000</code></td><td><code>board-seat-event</code></td><td><code>deal-1</code></td><td><code>party-1</code></td><td><code>board-member</code></td><td><code>granted</code></td><td><code>2026-07-06</code></td><td><code>true</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Portfolio KPI reports (deal-1)</h2>
+    <p class="lead">Drafts built by vcfund.registry/register-portfolio-report.</p>
+    <table>
+      <thead><tr><th>record_id</th><th>kind</th><th>deal_id</th><th>period</th><th>kpis</th><th>immutable</th></tr></thead>
+      <tbody>
+        <tr><td><code>deal-1#report@2026-Q3</code></td><td><code>portfolio-report</code></td><td><code>deal-1</code></td><td><code>2026-Q3</code></td><td><code>{:revenue 450000, :burn-rate 80000, :runway-months 14, :headcount 12}</code></td><td><code>true</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Exit distributions</h2>
+    <p class="lead">Deal-by-deal waterfall computed by vcfund.registry/distribute-waterfall from the caller-supplied closing facts.</p>
+    <table>
+      <thead><tr><th>record_id</th><th>kind</th><th>commitment_number</th><th>waterfall</th><th>effective_date</th><th>immutable</th></tr></thead>
+      <tbody>
+        <tr><td><code>USA-00000000#exit@3y</code></td><td><code>distribution-draft</code></td><td><code>USA-00000000</code></td><td><code>{:model :deal-by-deal-simple-preferred, :return-of-capital 2000000.0, :preferred-return-due 480000.0, :preferred-return-paid 480000.0, :gp-carry 1904000.0, :lp-residual-profit 7616000.0, :total-to-lp 1.0096E7, :total-to-gp 1904000.0}</code></td><td><code>3y</code></td><td><code>true</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>GP-clawback repayments (fund-level)</h2>
+    <p class="lead">Drafts built by vcfund.registry/register-clawback-repayment, gated on an independently recomputed entitlement.</p>
+    <table>
+      <thead><tr><th>record_id</th><th>kind</th><th>amount</th><th>effective_date</th><th>immutable</th></tr></thead>
+      <tbody>
+        <tr><td><code>CLAWBACK-000000</code></td><td><code>clawback-repayment-draft</code></td><td><code>1904000.0</code></td><td><code>2026-07-06</code></td><td><code>true</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Fund position (vcfund.nav/fund-nav-report)</h2>
+    <p class="lead">Computed from live store state with the report's own defaults; numeric fields only.</p>
+    <table>
+      <thead><tr><th>Field</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td><code>:annual-fee-rate</code></td><td><code>0.02</code></td></tr>
+        <tr><td><code>:fee-basis</code></td><td><code>6000000.0</code></td></tr>
+        <tr><td><code>:held-fair-value</code></td><td><code>0</code></td></tr>
+        <tr><td><code>:management-fees-accrued</code></td><td><code>0.0</code></td></tr>
+        <tr><td><code>:nav</code></td><td><code>1904000.0</code></td></tr>
+        <tr><td><code>:net-cash</code></td><td><code>1904000.0</code></td></tr>
+        <tr><td><code>:total-distributed-to-lps</code></td><td><code>1.0096E7</code></td></tr>
+        <tr><td><code>:years-elapsed</code></td><td><code>0</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Whole-fund waterfall reconciliation (fund life 100y)</h2>
+    <p class="lead">vcfund.waterfall/whole-fund-waterfall-report recomputed from every commitment and distribution on file. This is the figure the governor checks a clawback demand against — the proposal's own number is never trusted.</p>
+    <table>
+      <thead><tr><th>Field</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td><code>:gp-clawback</code></td><td><code>1904000.0</code></td></tr>
+        <tr><td><code>:preferred-return-paid</code></td><td><code>1.0E7</code></td></tr>
+        <tr><td><code>:return-of-capital</code></td><td><code>2000000.0</code></td></tr>
+        <tr><td><code>:total-gp-carry-already-paid</code></td><td><code>1904000.0</code></td></tr>
+        <tr><td><code>:whole-fund-gp-entitlement</code></td><td><code>0.0</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+</body></html>
