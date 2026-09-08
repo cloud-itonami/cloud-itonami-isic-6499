@@ -18,7 +18,7 @@
   proceeds itself (that is `vcfund.operation`'s `:investment/commit` and
   `:exit/distribute`, which are always human-gated -- see README
   `Actuation`)."
-  (:require [clojure.string :as str]))
+  (:require [kotoba.lang.text :as str]))
 
 (defn- unsigned-certificate
   "Every certificate this actor produces is UNSIGNED -- signature is the
@@ -51,7 +51,7 @@
     (throw (ex-info "commitment: jurisdiction required" {})))
   (when (< sequence 0)
     (throw (ex-info "commitment: sequence must be >= 0" {})))
-  (let [commitment-number (str (str/upper-case jurisdiction) "-" (zero-pad sequence 8))
+  (let [commitment-number (str (str/upper jurisdiction) "-" (zero-pad sequence 8))
         record {"record_id" commitment-number
                 "kind" "commitment-draft"
                 "portfolio_company" portfolio-company
@@ -84,7 +84,7 @@
     (throw (ex-info "follow-on: jurisdiction required" {})))
   (when (< sequence 0)
     (throw (ex-info "follow-on: sequence must be >= 0" {})))
-  (let [follow-on-number (str (str/upper-case jurisdiction) "-FOLLOWON-" (zero-pad sequence 8))
+  (let [follow-on-number (str (str/upper jurisdiction) "-FOLLOWON-" (zero-pad sequence 8))
         record {"record_id" follow-on-number
                 "kind" "follow-on-commitment-draft"
                 "portfolio_company" portfolio-company
@@ -153,7 +153,7 @@
     (throw (ex-info "capital-call: sequence must be >= 0" {})))
   (when-not (and notice-date (not= notice-date ""))
     (throw (ex-info "capital-call: notice-date required" {})))
-  (let [call-number (str (str/upper-case jurisdiction) "-CALL-" (zero-pad sequence 6))
+  (let [call-number (str (str/upper jurisdiction) "-CALL-" (zero-pad sequence 6))
         record {"record_id" call-number
                 "kind" "capital-call-draft"
                 "call_amount" (double call-amount)
