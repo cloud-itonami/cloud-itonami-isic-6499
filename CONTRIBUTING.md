@@ -6,9 +6,9 @@ actor, policy tests, documentation and operator model.
 ## Development
 
 ```bash
-clojure -M:dev:run     # walk the demo lifecycle through one OperationActor
-clojure -M:dev:test    # governor contract · phase invariants · store parity
-clojure -M:lint         # clj-kondo (errors fail; CI mirrors this)
+kbb -M:dev:run     # walk the demo lifecycle through one OperationActor
+kbb -M:dev:test    # governor contract · phase invariants · store parity
+kbb -M:lint         # clj-kondo (errors fail; CI mirrors this)
 ```
 
 Keep changes small and include tests for any governor/phase change.

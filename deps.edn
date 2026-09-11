@@ -30,11 +30,11 @@
   ;; io.github.com-junkawasaki/langchain-clj. langgraph declares the same
   ;; library as io.github.kotoba-lang/langchain, so the entry matched no
   ;; node in the resolved tree and never reached the classpath -- verified
-  ;; with `clojure -Stree`/-Spath, unchanged before and after removal.
+  ;; with `kbb -Stree`/-Spath, unchanged before and after removal.
   :dev {}
-  ;; clojure -M:dev:run  -> drive the demo through one OperationActor
+  ;; kbb -M:dev:run  -> drive the demo through one OperationActor
   :run {:main-opts ["-m" "vcfund.sim"]}
-  ;; clojure -M:dev:render-html [out-file] -> regenerate
+  ;; kbb -M:dev:render-html [out-file] -> regenerate
   ;; docs/samples/operator-console.html by driving the REAL actor
   ;; (vcfund.operation -> vcfund.governor -> vcfund.phase -> vcfund.store)
   ;; over the real seed data. Refuses to write a page that shows zero
@@ -53,7 +53,7 @@
          :exec-fn cognitect.test-runner.api/test}
   ;; PRIMARY gate: the same portable .cljc suite under a real
   ;; ClojureScript host (runtime priority: cljs first, JVM compat).
-  ;;   clojure -Sdeps '{:paths ["src" "test"]}' -M:dev:cljs \
+  ;;   kbb -Sdeps '{:paths ["src" "test"]}' -M:dev:cljs \
   ;;     -m cljs.main --target node -m vcfund.portable-cljs-test-runner
   :cljs {:extra-deps {org.clojure/clojurescript {:mvn/version "1.11.132"}}}
   ;; static analysis -- clj-kondo from deps (no binary), errors fail CI.

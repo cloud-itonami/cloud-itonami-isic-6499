@@ -4,7 +4,7 @@
   This namespace drives the REAL actor stack (`vcfund.operation` ->
   `vcfund.governor` -> `vcfund.phase` -> `vcfund.store`) through a
   scenario extended from this repo's own `vcfund.sim` demo driver
-  (`clojure -M:dev:run`, run BEFORE this file was written to confirm the
+  (`kbb -M:dev:run`, run BEFORE this file was written to confirm the
   seeded ids and the ledger it actually produces), and renders the result
   deterministically.
 
@@ -26,7 +26,7 @@
   No timestamps in the page content, so reruns are byte-identical
   against the same seed.
 
-  Usage: `clojure -M:dev:render-html [out-file]`
+  Usage: `kbb -M:dev:render-html [out-file]`
   (default `docs/samples/operator-console.html`)."
   (:require [kotoba.lang.text :as str]
             [langgraph.graph :as g]
