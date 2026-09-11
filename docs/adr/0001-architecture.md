@@ -311,7 +311,7 @@ A third honest coverage pass closed the three gaps the owner picked next:
 
 Consequences: `test/vcfund/*` grew from 60 tests/278 assertions to 81
 tests/347 assertions (new `nav_test.clj` plus governor/registry/store/
-phase additions), still lint-clean; demo (`clojure -M:dev:run`) walks the
+phase additions), still lint-clean; demo (`kbb -M:dev:run`) walks the
 full lifecycle including the new term-sheet round and its own HARD-hold
 case (proposing terms after commitment). Remaining honest gaps (tracked in
 README's "Business-process coverage" table): term-sheet
@@ -424,7 +424,7 @@ Consequences: `test/vcfund/*` grew from 92 tests/373 assertions to 112
 tests/439 assertions (new signature/diff/vesting/option/multi-SAFE/SAFT
 tests across `governor_contract_test.clj`, `registry_test.clj`,
 `captable_test.clj` and `store_contract_test.clj`), still lint-clean;
-demo (`clojure -M:dev:run`) walks the full lifecycle including both-sides
+demo (`kbb -M:dev:run`) walks the full lifecycle including both-sides
 term-sheet signing and a multi-violation HARD hold (a deal with DD
 incomplete, stage insufficient, AND an unsigned term sheet all at once,
 printed together -- the governor reports every violation, not just the
@@ -505,7 +505,7 @@ clawback-repay parity tests across both `Store` backends in
 `clawback-repay-exceeding-entitlement-is-held` and `waterfall-clawback-
 repay-always-escalates-then-human-decides` in
 `governor_contract_test.clj`; never-auto-at-any-phase structural tests in
-`phase_test.clj`), still lint-clean; demo (`clojure -M:dev:run`) now walks
+`phase_test.clj`), still lint-clean; demo (`kbb -M:dev:run`) now walks
 a follow-on deployment and a whole-fund clawback reconciliation +
 repayment through the full escalate-then-approve path, plus two new HARD
 holds (a follow-on on a never-committed deal, a clawback request far
@@ -814,7 +814,7 @@ tests/629 assertions (new tests in `nav_test.clj`: `fund-nav-report`
 exposing `:total-distributed-to-lps`, `lp-capital-account`'s pure math
 and validation rules, `lp-capital-account-report` reconciling exactly
 against `fund-nav-report`'s totals, FX-awareness, and the empty-store
-edge case), still lint-clean; demo (`clojure -M:dev:run`) unaffected --
+edge case), still lint-clean; demo (`kbb -M:dev:run`) unaffected --
 consistent with every prior `vcfund.nav`/`vcfund.captable` addition,
 neither of the two new fns is a governed op, so `sim.cljc` needed no
 changes. Remaining honest gaps (tracked in README's "Business-process

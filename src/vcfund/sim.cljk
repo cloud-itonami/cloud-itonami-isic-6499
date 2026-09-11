@@ -1,5 +1,5 @@
 (ns vcfund.sim
-  "Demo driver -- `clojure -M:dev:run`. Walks a clean LP + deal through
+  "Demo driver -- `kbb -M:dev:run`. Walks a clean LP + deal through
   LP intake -> deal DD assessment -> KYC screening -> pipeline-stage
   advance to :ic-review (auto-commits, no capital risk) -> term-sheet
   proposal + both-sides e-signature (auto-commit) -> capital-call proposal
