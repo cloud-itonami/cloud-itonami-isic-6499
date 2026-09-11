@@ -3,10 +3,10 @@
 `clawback_entitlement.kotoba` is a port of `vcfund.governor/clawback-
 exceeds-entitlement-violations`'s pure ground-truth comparison -- does a
 requested GP-clawback repayment exceed the independently recomputed
-whole-fund waterfall entitlement? (see `src/vcfund/governor.cljc` lines
+whole-fund waterfall entitlement? (see `src/vcfund/governor.cljk` lines
 ~335-351, check 14 of 15 HARD violations) -- into the minimal `.kotoba`
 language subset, compiled to a real WASM module via `kotoba wasm emit`,
-and hosted via `kototama.tender` (`test/wasm/clawback_entitlement_test.clj`).
+and hosted via `kototama.tender` (`test/wasm/clawback_entitlement_test.cljk`).
 
 This follows the same `kotoba wasm emit` → `kototama.tender` pattern
 already proven by `cloud-itonami-isic-6492`'s `wasm/affordability.kotoba`,

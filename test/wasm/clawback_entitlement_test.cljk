@@ -3,7 +3,7 @@
   wasm/clawback_entitlement.kotoba, see wasm/README.md) via
   kototama.tender -- proves vcfund.governor's clawback-exceeds-entitlement
   check (`clawback-exceeds-entitlement-violations` in
-  src/vcfund/governor.cljc, backed by the pure kernel comparison
+  src/vcfund/governor.cljk, backed by the pure kernel comparison
   `vcfund.kernels.gate/clawback-exceeds`) runs as a real WASM guest, not
   just as JVM Clojure.
 
