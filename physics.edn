@@ -1,0 +1,45 @@
+;; What this vertical's robot physically does, declared for
+;; kotoba.robotics.process (kotoba-lang/robotics). `kbb -M:dev:physics` runs it.
+;;
+;; README "Robotics premise": a secure document-custody robot manages physical
+;; due-diligence data-room documents, signed term sheets and cap-table paper
+;; records (ISIC 6499, other financial service activities -- venture fund).
+;; Its physical work is custody of paper: carrying sealed document boxes from
+;; the data room to the vault, placing them on vault shelving, and keeping them
+;; below the charring temperature of paper inside a fire-rated cabinet.
+;;
+;; Every number without a cited source is marked `estimate` in its :basis.
+;; Replacing an estimate with a sourced value is this bot's growth work.
+{:physics/schema "itonami.physical-ai.spec.v1"
+ :repo "cloud-itonami/cloud-itonami-isic-6499"
+ :cases
+ [{:id :data-room-box-to-vault
+   :kind :transport
+   :procedure "custody robot carries a sealed box of signed term sheets from the data room to the vault"
+   :params {:mass-kg 50.0 :distance-m 45.0 :v-max-mps 0.8 :a-max-mps2 0.4
+            :brake-decel-mps2 0.8 :drive-force-n 120.0 :crr 0.02
+            :cog-height-m 0.50 :support-half-length-m 0.25 :max-time-s 1800.0}
+   :sweep {:param :payload-kg :values [5.0 10.0 20.0 40.0 80.0]}
+   :quantity :cycle-time-s
+   :limit {:max 70.0 :basis "estimate: one corridor leg inside a chain-of-custody hand-off window, allowing for the vault door cycle"}
+   :boundary {:lo 1.0 :hi 1000.0}}
+  {:id :archive-box-to-vault-shelf
+   :kind :manipulator
+   :procedure "arm lifts a cap-table archive box from the cart onto an upper vault shelf"
+   :params {:l1-m 0.50 :l2-m 0.45 :m1-kg 4.0 :m2-kg 3.0
+            :from [0.60 0.10] :to [0.25 0.80] :duration-s 3.0 :steps 500}
+   :sweep {:param :payload-kg :values [1.0 3.0 5.0 8.0 12.0]}
+   :quantity :peak-tau1-nm
+   :limit {:max 90.0 :basis "estimate: continuous shoulder torque of a 10 kg-class collaborative arm"}
+   :boundary {:lo 0.1 :hi 40.0}}
+  {:id :fire-rated-cabinet-wall
+   :kind :thermal
+   :procedure "fire-rated records cabinet wall (insulating fill) under a 1 h standard fire, then cool-down; inner face must stay below paper-char temperature"
+   :params {:conductivity-w-mk 0.25 :density-kg-m3 1000.0 :specific-heat-j-kgk 1100.0
+            :hot-curve :iso-834 :h-front-w-m2k 25.0 :h-back-w-m2k 5.0
+            :heating-s 3600.0 :t-cool-c 20.0 :duration-s 10800.0 :nodes 15
+            :threshold-c 177.0}
+   :sweep {:param :thickness-m :values [0.03 0.045 0.06 0.08 0.10]}
+   :quantity :peak-back-c
+   :limit {:max 177.0 :basis "UL 72 Class 350: interior of record-protection equipment must stay below 350 F (177 C) (exposure here is the ISO 834-1 curve, not UL 72's ASTM E119 furnace; fill properties are estimates)"}
+   :boundary {:lo 0.02 :hi 0.15}}]}
