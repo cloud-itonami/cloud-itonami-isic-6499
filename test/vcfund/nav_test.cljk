@@ -1,5 +1,5 @@
 (ns vcfund.nav-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [vcfund.nav :as nav]
             [vcfund.store :as store]))
 

@@ -17,7 +17,7 @@
   peeking behind its DisclosureGovernor), so the end-to-end proof here is
   'no longer silently clears', not 'now hard-holds' -- see
   `corporate-intel-catches-the-hit-local-checks-miss` below."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [langgraph.graph :as g]
             [vcfund.store :as store]
             [vcfund.operation :as op]

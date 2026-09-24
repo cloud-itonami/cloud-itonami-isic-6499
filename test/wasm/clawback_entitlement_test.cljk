@@ -12,7 +12,7 @@
   exported linear memory at fixed offsets before calling main() -- see
   wasm/clawback_entitlement.kotoba's ns docstring for the offset layout."
   (:require [clojure.java.io :as io]
-            [clojure.test :refer [deftest is testing]]
+            [kotoba.test :refer [deftest is testing]]
             [kototama.contract :as contract]
             [kototama.tender :as tender]))
 

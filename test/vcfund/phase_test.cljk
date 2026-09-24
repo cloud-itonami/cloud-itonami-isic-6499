@@ -3,7 +3,7 @@
   regress on: none of `:capital-call/issue`, `:investment/commit`,
   `:investment/follow-on`, `:exit/distribute` or `:waterfall/clawback-
   repay` may ever be a member of any phase's `:auto` set."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [vcfund.phase :as phase]))
 
 (deftest capital-call-issue-never-auto-at-any-phase
