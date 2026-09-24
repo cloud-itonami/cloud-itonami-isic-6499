@@ -16,7 +16,7 @@
   4. clawback threshold — the scaled-integer (micro-unit) comparison
      that replaced the old inline 1e-6 float epsilon, exercised both
      directly and through the real façade against a real store."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [vcfund.governor :as governor]
             [vcfund.kernels.gate :as gate]
             [vcfund.store :as store]))

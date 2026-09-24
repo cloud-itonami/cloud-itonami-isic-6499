@@ -4,7 +4,7 @@
   makes 'swap the SSoT for Datomic / kotoba-server' a configuration
   change, not a rewrite -- see `underwriting.store-contract-test` for the
   same pattern on the sibling actor this repo ports."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [vcfund.registry :as registry]
             [vcfund.store :as store]))
 

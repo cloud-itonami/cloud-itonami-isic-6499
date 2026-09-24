@@ -1,5 +1,5 @@
 (ns vcfund.concentration-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [vcfund.concentration :as concentration]
             [vcfund.store :as store]))
 

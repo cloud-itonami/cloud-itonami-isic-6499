@@ -1,5 +1,5 @@
 (ns vcfund.pipeline-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [vcfund.pipeline :as pipeline]))
 
 (deftest forward-moves-within-the-funnel-are-legal
