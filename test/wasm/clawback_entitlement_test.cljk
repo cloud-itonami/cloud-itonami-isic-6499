@@ -11,7 +11,7 @@
   :main-arity); the two real i32 inputs are written into the guest's
   exported linear memory at fixed offsets before calling main() -- see
   wasm/clawback_entitlement.kotoba's ns docstring for the offset layout."
-  (:require [clojure.java.io :as io]
+  (:require [kotoba.io :as io]
             [kotoba.test :refer [deftest is testing]]
             [kototama.contract :as contract]
             [kototama.tender :as tender]))
