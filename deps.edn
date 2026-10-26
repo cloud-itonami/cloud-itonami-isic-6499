@@ -21,7 +21,8 @@
                                     :git/sha "2ab4885f99fd25552d380d0f6b0b54c5a72eb7ae"}
         ;; kotoba.robotics.process: the process-physics solvers and probe this
         ;; repo's physics.edn runs on (physical-AI bot, scripts/physical-ai-bots).
-        io.github.kotoba-lang/robotics {:local/root "../../kotoba-lang/robotics"}
+        io.github.kotoba-lang/robotics
+        {:local/root "../../kotoba-lang/kotoba/lib/kotoba.robotics"}
 
         ;; kotoba.lang.text, not clojure.string. Pinned as an explicit floor:
         ;; tools.deps takes the NEWEST sha it is shown, so without a floor here
@@ -34,7 +35,7 @@
         ;; hand-rolling the pr-str/edn.read-string two-liner ~190 sibling
         ;; stores duplicated (ADR-2607141600).
         io.github.kotoba-lang/langchain-store
-        {:local/root "../../kotoba-lang/langchain-store"}
+        {:local/root "../../kotoba-lang/kotoba/lib/kotoba.langchainStore"}
         ;; optional: vcfund.corporate-intel's cross-reference into
         ;; cloud-itonami-isic-8291 (ADR-2607110400 §5). Only
         ;; vcfund.corporate-intel itself requires `dossier.*` --
